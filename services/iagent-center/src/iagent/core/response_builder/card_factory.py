@@ -1,0 +1,56 @@
+from datetime import datetime, timezone
+from typing import Any
+
+from iagent.api.schemas.ui_cards import AccountBalance, BalanceCard, ErrorCard
+
+
+def make_balance_card(accounts_data: list[dict[str, Any]]) -> BalanceCard:
+    """Convert raw account dicts (from tools/balance.py) into a BalanceCard Pydantic model.
+
+    This function is a "factory" — it creates and returns a typed object.
+    Keeping it separate from the route handler means card creation logic is easy to test
+    in isolation (no HTTP, no LLM, no Redis needed in the test).
+
+    In Java this would be a static factory method:
+    public static BalanceCard from(List<Map<String, Object>> accountsData) { ... }
+    """
+
+    # LIST COMPREHENSION — this is one of Python's most distinctive features.
+    # It's a compact way to build a new list by transforming each item in another list.
+    #
+    # In Java (verbose):
+    #   List<AccountBalance> accounts = new ArrayList<>();
+    #   for (Map<String, Object> a : accounts_data) {
+    #       accounts.add(new AccountBalance(a.get("account_id"), ...));
+    #   }
+    #
+    # In Python (compact):
+    #   accounts = [AccountBalance(...) for a in accounts_data]
+    #
+    # Read it as: "for each 'a' in accounts_data, create an AccountBalance from it"
+    accounts = [
+        AccountBalance(
+            account_id=a["account_id"],  # a["key"] reads a dict value — like Java's Map.get("key")
+            currency=a["currency"],
+            available=a["available"],
+            pending=a.get("pending", 0.0),  # .get(key, default) — safe read with fallback
+        )
+        for a in accounts_data  # ← the loop part of the comprehension
+    ]
+
+    # Create and return a BalanceCard Pydantic model.
+    # "datetime.now(tz=timezone.utc)" gets the current UTC timestamp.
+    # In Java: ZonedDateTime.now(ZoneOffset.UTC)
+    # The "as_of" field tells the mobile app WHEN the balance was fetched.
+    return BalanceCard(accounts=accounts, as_of=datetime.now(tz=timezone.utc))
+
+
+def make_error_card(code: str, message: str, recoverable: bool = True) -> ErrorCard:
+    """Create an ErrorCard to display when something goes wrong.
+
+    "recoverable: bool = True" is a parameter with a default value.
+    If the caller doesn't pass recoverable, it defaults to True.
+    In Java: public static ErrorCard of(String code, String message, boolean recoverable)
+    — but Java doesn't have default parameter values, so you'd need overloading.
+    """
+    return ErrorCard(code=code, message=message, recoverable=recoverable)

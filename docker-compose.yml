@@ -1,0 +1,21 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  wiremock:
+    image: wiremock/wiremock:3.5.4
+    ports:
+      - "8080:8080"
+
+  iagent-center:
+    build:
+      context: ./services/iagent-center
+      dockerfile: Dockerfile
+    env_file: .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+      - wiremock
