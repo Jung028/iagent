@@ -13,21 +13,7 @@ class IBusinessClient(BaseServiceClient):
     Inherits all retry, circuit breaker, and auth logic from BaseServiceClient.
     """
 
-    async def query_balance(self, account_id: str, **ctx: str) -> dict[str, Any]:
-        """Fetch the current balance for an account.
-
-        Calls POST /business/basic/queryBalance.json on the business service.
-        The response is wrapped in BusinessBizResult<BusinessBalanceResult>; we extract .data.
-
-        Returns a dict like:
-        {"currency": "USD", "available": 250.00, "pending": 0.0}
-
-        "available" = funds the user can spend right now.
-        "pending"   = funds reserved by in-progress transactions (not yet settled).
-        """
-
-        # POST with a JSON body — matches @PostMapping + @RequestBody on the Java side.
-        # In Java: BusinessBalanceRequest request = new BusinessBalanceRequest(accountId)
+    async def query_balance(self, account_id: str, **ctx) -> dict[str, Any]:
         response = await self._request(
             "POST",
             "/business/basic/queryBalance.json",
@@ -37,7 +23,45 @@ class IBusinessClient(BaseServiceClient):
 
         response.raise_for_status()
 
-        # The Java service wraps the payload in BusinessBizResult<BusinessBalanceResult>.
-        # The actual balance data lives in the "data" field.
-        # In Java: result.getData()
-        return response.json()["data"]
+        payload = response.json()
+        result = payload.get("result", {})
+
+        # ❗ enforce business success
+        if not payload.get("success") or result.get("success") is False:
+            raise ValueError(f"Balance query failed: {payload}")
+
+        return {
+            "currency": result.get("currency"),
+            "balance": result.get("balance", 0.0),
+            "pending": 0.0,
+        }
+    
+    async def query_transaction_details(self, account_id: str, txn_id: str, **ctx: str) -> dict[str, Any] :
+        response = await self._request(
+            "POST",
+            "/business/basic/queryTransactionDetails.json",
+            json={"accountId": account_id,
+                  "txnId": txn_id,},
+            **ctx,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        result = payload.get("result", {})
+
+        # ❗ enforce business success
+        if not payload.get("success") or result.get("success") is False:
+            raise ValueError(f"Balance query failed: {payload}")
+        
+        return {
+            "transaction_id": result.get("txnId"),
+            "payer_account_id": result.get("payerAccountId"),
+            "payee_account_id": result.get("payeeAccountId"),
+            "amount": float(result.get("amount", 0.0)),
+            "currency": result.get("currency", "MYR"),
+            "txn_type": result.get("txnType"),
+            "txn_status": result.get("txnStatus"),
+            "failure_reason": result.get("failureReason"),
+            "created_at": result.get("gmtCreate"),
+            "completed_at": result.get("gmtComplete"),
+        }
+    

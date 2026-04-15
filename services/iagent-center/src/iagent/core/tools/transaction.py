@@ -1,0 +1,36 @@
+from typing import Any
+
+from iagent.integrations.iaccount import IAccountClient
+from iagent.integrations.ibusiness import IBusinessClient
+
+
+async def handle(
+        user_id: str,
+        transaction_id: str,
+        account_client: IAccountClient,
+        business_client: IBusinessClient,
+        **ctx: str,
+) -> dict[str, Any]:
+    """Fetch transaction details for a given user and transaction ID.
+
+    Returns a normalised dict ready for card_factory / response_builder.
+    """
+    account = await account_client.get_account_by_user_id(user_id, **ctx)
+    account_id = account["accountId"]
+
+    # ibusiness already normalises the result — use it directly
+    txn = await business_client.query_transaction_details(account_id, transaction_id, **ctx)
+
+    return {
+        "account_id":     account_id,
+        "transaction_id": txn.get("transaction_id"),
+        "payer_account_id": txn.get("payer_account_id"),
+        "payee_account_id": txn.get("payee_account_id"),
+        "amount":         txn.get("amount", 0.0),
+        "currency":       txn.get("currency", "MYR"),
+        "txn_type":       txn.get("txn_type"),
+        "txn_status":     txn.get("txn_status"),
+        "failure_reason": txn.get("failure_reason"),
+        "created_at":     txn.get("created_at"),
+        "completed_at":   txn.get("completed_at"),
+    }

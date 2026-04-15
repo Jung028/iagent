@@ -31,9 +31,9 @@ class Settings(BaseSettings):
     app_port: int = 8000           # int is Python's int (no Integer wrapper class needed)
     log_level: str = "info"
 
-    # Anthropic API key — NO default value = REQUIRED.
-    # If APP_ENV is missing from environment, the app crashes at startup with a clear error.
-    anthropic_api_key: str
+    # Gemini API key — NO default value = REQUIRED.
+    # Get yours from https://aistudio.google.com/apikey
+    gemini_api_key: str
 
     # Redis connection string. Has a default so it's optional in .env.
     redis_url: str = "redis://localhost:6379/0"
@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     # Java backend service base URLs — all REQUIRED (no defaults).
     iaccount_base_url: str
     ibusiness_base_url: str
+
+    # WhatsApp Cloud API — all optional so the server starts without WhatsApp configured.
+    # Get these from Meta Developer Console → WhatsApp → API Setup.
+    whatsapp_phone_number_id: str = ""     # e.g. "123456789012345"
+    whatsapp_access_token: str = ""        # temporary or permanent system user token
+    whatsapp_verify_token: str = "iagent" # any string you choose — used for hub challenge
+    whatsapp_app_secret: str = ""          # used to verify X-Hub-Signature-256 on incoming webhooks
 
 
 # Create a single shared instance of Settings.

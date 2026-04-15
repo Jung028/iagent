@@ -1,150 +1,139 @@
-import structlog  # Structured logging library — produces JSON log lines instead of plain text
-
-import anthropic   # The official Anthropic Python SDK for calling Claude
+import structlog
+from google import genai
+from google.genai import types
 
 from iagent.core.intent.models import Intent, IntentResult
 from iagent.core.intent.prompts import EXTRACT_INTENT_TOOL, SYSTEM_PROMPT
 
-# "structlog.get_logger(__name__)" creates a logger named after this module's path.
-# "__name__" is a built-in Python variable that holds the current module's name
-# (e.g. "iagent.core.intent.classifier"). This is like LoggerFactory.getLogger(getClass()) in Java.
 log = structlog.get_logger(__name__)
 
-# A module-level constant for the Claude model name we use for classification.
-# Declaring it here (not inside the class) makes it easy to change in one place.
-MODEL = "claude-sonnet-4-5"
+MODEL = "gemini-2.5-flash"
 
 
 class IntentClassifier:
-    """Classifies a user's natural language message into a structured Intent.
-
-    This is the only place in the codebase that calls the Anthropic (Claude) API.
-    It uses a Redis cache to avoid redundant LLM calls for repeated messages.
+    """
+    LLM-based intent classifier with:
+    - safe StrEnum mapping
+    - cache support
+    - robust tool-call parsing
+    - router-safe UNKNOWN fallback
     """
 
-    # "__init__" is Python's constructor — equivalent to Java's public IntentClassifier(...) {}
-    # "self" is Python's equivalent of Java's "this" — it refers to the current instance.
-    # You MUST include "self" as the first parameter of every instance method in Python.
-    # In Java it's implicit; in Python you must be explicit.
-    def __init__(self, client: anthropic.AsyncAnthropic, redis: object) -> None:
-        # "self._client" stores the parameter as an instance variable.
-        # The underscore prefix (_) is convention for "private" — like Java's private field.
-        # In Java: private final AsyncAnthropic client;  this.client = client;
+    def __init__(self, client: genai.Client, redis: object) -> None:
         self._client = client
         self._redis = redis
 
+        # Precompute safe mapping (fast + avoids Enum(ValueError))
+        self._intent_map = {intent.value: intent for intent in Intent}
+
     async def classify(self, user_id: str, message: str) -> IntentResult:
-        """Public method: classify a message, using cache when available.
-
-        This is the method called by the route handler in chat.py.
-        It always returns an IntentResult — it never raises an exception to the caller.
-        If the LLM call fails, it returns UNKNOWN instead of crashing.
-        """
-        #1. Try search cache if user has already asked same question to get intent, return intent,
-        #2. else, it will call_llm, which basically, retrieves the intent "balance_inquiry"
-        #3. then set_cached for future reference. in case user asks the same question, we can retrieve intent again. 
-
-        # Import cache functions inside the method to avoid a circular import issue.
-        # (cache.py imports from models.py; models.py doesn't import cache.py — fine.
-        # But if both were imported at the top of this file, Python might try to import
-        # them before they're fully loaded.) This is a Python-specific concern.
         from iagent.core.intent.cache import get_cached, set_cached
 
-        # Try the cache first. If we already classified this exact message for this user
-        # within the last 5 minutes, return the cached result immediately (no LLM call).
+        # 1. cache lookup (only safe hits)
         cached = await get_cached(self._redis, user_id, message)
-        if cached is not None:
-            # "log.info()" logs a structured JSON line. The keyword arguments (user_id=, intent=)
-            # become fields in the JSON log output — easy to query in a log management tool.
+        if cached is not None and cached.intent != Intent.UNKNOWN:
             log.info("intent_cache_hit", user_id=user_id, intent=cached.intent)
             return cached
 
-        # Cache miss — we need to call the LLM.
-        # "try/except" is Python's equivalent of Java's try/catch.
+        # 2. LLM call
         try:
-            result = await self._call_llm(message)
+            result = IntentResult(
+                intent=Intent.TRANSACTION_DETAILS_INQUIRY,
+                confidence=0.0,
+                entities={"txn_id":"000a1708-2655-4071-a53f-e54559d422ea"}
+            )
+            # TODO: FOR debug purposes, we will hard code the LLM call result. 
+            #result = await self._call_llm(message)
         except Exception as exc:
-            # "Exception" is the base class for all exceptions in Python (like Java's Exception).
-            # "as exc" binds the exception to the variable "exc" so we can read its message.
-            # If the Anthropic API is down or times out, we fall back to UNKNOWN
-            # rather than returning a 500 error to the user.
             log.warning("intent_classification_failed", error=str(exc))
-            result = IntentResult(intent=Intent.UNKNOWN, confidence=0.0)
+            result = IntentResult(
+                intent=Intent.UNKNOWN,
+                confidence=0.0,
+                entities={}
+            )
 
-        # Store the result in cache (even UNKNOWN — no point retrying a bad message for 5 min).
+        # 3. cache result
         await set_cached(self._redis, user_id, message, result)
-        log.info("intent_classified", user_id=user_id, intent=result.intent)
+
+        log.info(
+            "intent_classified",
+            user_id=user_id,
+            intent=result.intent,
+            confidence=result.confidence,
+        )
+
         return result
 
     async def _call_llm(self, message: str) -> IntentResult:
-        """Private method: make the actual Anthropic API call.
+        """Call Gemini with safe tool-calling (AUTO mode)."""
 
-        The leading underscore signals this is internal — only called by classify().
-        In Java this would be: private IntentResult callLlm(String message)
-        """
-
-        # "block.input" is the dict Claude filled in according to our JSON schema.
-                # e.g. {"intent": "balance_inquiry", "confidence": 0.97}
-        #4. 
-
-        # Call the Anthropic Messages API.
-        # "await" is needed because this is a network call — it pauses execution here
-        # and lets other requests be processed while waiting for the API response.
-        response = await self._client.messages.create(
+        response = await self._client.aio.models.generate_content(
             model=MODEL,
-            max_tokens=128,  # Cap the response length — we only need a short JSON tool call
-
-            # "system" sets the persistent instructions for Claude.
-            # We pass it as a list with one dict so we can attach "cache_control".
-            # "cache_control: {"type": "ephemeral"}" tells Anthropic's servers to cache
-            # this system prompt — we're not re-charged tokens for it on repeat calls.
-            system=[
-                {
-                    "type": "text",
-                    "text": SYSTEM_PROMPT,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-
-            # "tools" is the list of tool definitions Claude can call.
-            # We pass only one tool, so Claude is forced to call it.
-            # The "# type: ignore[list-item]" suppresses a mypy type mismatch warning
-            # caused by our dict not matching the SDK's exact TypedDict shape — safe to ignore.
-            tools=[EXTRACT_INTENT_TOOL],  # type: ignore[list-item]
-
-            # "tool_choice: {"type": "any"}" tells Claude it MUST call one of the tools.
-            # Without this, Claude might sometimes respond with text instead of a tool call.
-            tool_choice={"type": "any"},
-
-            # "messages" is the conversation history. For classification we only send
-            # the current user message — no previous turns needed.
-            messages=[{"role": "user", "content": message}],
+            contents=message,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                tools=[EXTRACT_INTENT_TOOL],
+                tool_config=types.ToolConfig(
+                    function_calling_config=types.FunctionCallingConfig(
+                        mode="AUTO"   # correct supported mode
+                    )
+                ),
+            ),
         )
 
-        # Claude's response contains a list of "content blocks".
-        # When Claude uses a tool, one block will be of type "tool_use".
-        # We loop through all blocks looking for the one we care about.
-        #
-        # "for X in Y:" is Python's for-each loop — like Java's "for (X x : y)"
-        for block in response.content:
+        # 1. validate response structure
+        if not response.candidates:
+            return self._fallback()
 
-            # Check if this block is a tool call AND it's the right tool name.
-            if block.type == "tool_use" and block.name == "extract_financial_intent":
+        candidate = response.candidates[0]
 
-                # "block.input" is the dict Claude filled in according to our JSON schema.
-                # e.g. {"intent": "balance_inquiry", "confidence": 0.97}
-                inp = block.input  # type: ignore[attr-defined]
+        if not candidate.content or not candidate.content.parts:
+            return self._fallback()
 
-                return IntentResult(
-                    # Intent(inp["intent"]) converts the string to our Intent enum.
-                    # inp["intent"] reads the "intent" key from the dict — like Java's Map.get().
-                    intent=Intent(inp["intent"]),
+        # 2. extract function call
+        for part in candidate.content.parts:
+            fc = getattr(part, "function_call", None)
+            if not fc:
+                continue
 
-                    # .get("confidence", 1.0) returns the value or 1.0 if the key is missing.
-                    # In Java: (double) inp.getOrDefault("confidence", 1.0)
-                    confidence=inp.get("confidence", 1.0),
-                )
+            if fc.name != "extract_financial_intent":
+                continue
 
-        # If Claude returned no tool_use block (shouldn't happen with tool_choice="any"),
-        # fall back to UNKNOWN safely.
-        return IntentResult(intent=Intent.UNKNOWN, confidence=0.0)
+            args = dict(fc.args or {})
+
+            return self._build_result(args)
+
+        # 3. no tool call returned
+        return self._fallback()
+
+    def _build_result(self, args: dict) -> IntentResult:
+        """Convert LLM output → safe IntentResult.
+        We retrieve the enties from the llm, identifying the relevant context 
+        """
+
+        raw_intent = args.get("intent", "unknown")
+
+        # normalize LLM output (critical fix)
+        normalized = str(raw_intent).lower().strip()
+
+        # safe enum mapping (NO direct Enum(value) casting)
+        intent = self._intent_map.get(normalized, Intent.UNKNOWN)
+
+        try:
+            confidence = float(args.get("confidence", 0.0))
+        except Exception:
+            confidence = 0.0
+
+        return IntentResult(
+            intent=intent,
+            confidence=confidence,
+            entities=dict(args.get("entities", {})),
+        )
+
+    def _fallback(self) -> IntentResult:
+        """Safe fallback when LLM fails."""
+        return IntentResult(
+            intent=Intent.UNKNOWN,
+            confidence=0.0,
+            entities={}
+        )

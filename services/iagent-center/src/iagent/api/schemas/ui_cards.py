@@ -21,8 +21,23 @@ from pydantic import BaseModel, Field
 class AccountBalance(BaseModel):
     account_id: str    # Java: String accountId
     currency: str      # e.g. "USD", "MYR"
-    available: float   # float in Python is a 64-bit double — same as Java's double
+    balance: float   # float in Python is a 64-bit double — same as Java's double
     pending: float     # money that is reserved but not yet settled
+
+
+class TransactionDetails(BaseModel):
+    account_id: str
+    txn_id: str
+    amount: float
+    currency: str
+    payee: str | None = None
+    txn_type: str | None = None
+    created_at: str | None = None
+    completed_at: str | None = None
+
+class TransactionDetailsCard(BaseModel):
+    type: Literal["transaction_details_card"] = "transaction_details_card"
+    transaction_details: TransactionDetails
 
 
 class BalanceCard(BaseModel):
@@ -70,6 +85,6 @@ class ErrorCard(BaseModel):
 # Pydantic instantiates a BalanceCard. When it sees "type": "error_card", it makes an ErrorCard.
 # In Java Jackson this is: @JsonTypeInfo(use=Id.NAME, property="type")
 AnyUICard = Annotated[
-    Union[BalanceCard, ErrorCard],
+    Union[BalanceCard, ErrorCard, TransactionDetailsCard],
     Field(discriminator="type"),
 ]

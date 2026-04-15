@@ -11,13 +11,14 @@ from typing import AsyncIterator
 
 # "import X" brings the whole module in. You then use it as "anthropic.AsyncAnthropic()"
 # This is like Java's "import com.anthropic.*" — you keep the namespace prefix.
-import anthropic
+from google import genai
 
 # "import X as Y" is an alias. We import the redis async library but call it "aioredis"
 # so it's clear we're using the async version. In Java you'd just rename the variable.
 import redis.asyncio as aioredis
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 # Import our own modules. The dot-notation matches the folder structure:
 # "iagent.api.middleware.auth" = src/iagent/api/middleware/auth.py
@@ -31,6 +32,21 @@ from iagent.integrations.ibusiness import IBusinessClient
 from iagent.observability.logging import configure_logging
 from iagent.observability.metrics import configure_metrics
 from iagent.observability.tracing import configure_tracing
+from iagent.core.orchestrator import Orchestrator
+from iagent.core.orchestrator.router import IntentRouter
+from iagent.core.orchestrator.handlers.transaction_inquiry import TransactionDetailsInquiryHandler
+from iagent.core.orchestrator.handlers.balance_inquiry import BalanceInquiryHandler
+from iagent.core.orchestrator.handlers.recurring_payment import RecurringPaymentHandler
+from iagent.core.orchestrator.handlers.expense_tracking import ExpenseTrackingHandler
+from iagent.core.orchestrator.handlers.photo_claim import PhotoClaimHandler
+from iagent.core.intent.models import Intent
+from iagent.core.context.session_store import SessionStore
+from iagent.core.context.profile_loader import ProfileLoader
+from iagent.integrations.platforms.registry import PlatformRegistry
+from iagent.integrations.platforms.whatsapp import WhatsAppAdapter
+from iagent.integrations.platforms.whatsapp.client import WhatsAppClient
+from iagent.integrations.platforms.whatsapp.verifier import WhatsAppWebhookVerifier
+from iagent.api.routes.webhooks import whatsapp as whatsapp_webhook
 
 
 # "@asynccontextmanager" is a DECORATOR — it wraps the function below it and adds
@@ -55,13 +71,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # "aioredis.from_url()" returns an async Redis client (non-blocking I/O).
     redis = aioredis.from_url(settings.redis_url)
 
-    # Create the Anthropic (Claude) API client with our API key from config.
-    anthropic_client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    # Create the Gemini client with our API key from config.
+    gemini_client = genai.Client(api_key=settings.gemini_api_key)
 
-    # Create our IntentClassifier, passing it the Anthropic client and Redis.
+    # Create our IntentClassifier, passing it the Gemini client and Redis.
     # Then attach it to "app.state" — this is FastAPI's way of storing shared objects
     # that all route handlers can access. In Java Spring this would be @Autowired injection.
-    app.state.classifier = IntentClassifier(anthropic_client, redis)
+    app.state.classifier = IntentClassifier(gemini_client, redis)
 
     # Create the two Java backend service clients and store them on app.state too.
     # token_provider=None means M2M auth is not yet implemented (TODO for Sprint 3).
@@ -71,6 +87,45 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.business_client = IBusinessClient(
         settings.ibusiness_base_url, "ibusiness", token_provider=None
     )
+
+    # Wire up context services.
+    # ProfileLoader gets its OWN IAccountClient instance so that connection
+    # failures in profile loading don't open the circuit breaker used by
+    # BalanceInquiryHandler and other handlers.
+    profile_account_client = IAccountClient(
+        settings.iaccount_base_url, "iaccount-profile", token_provider=None
+    )
+    app.state.session_store = SessionStore(redis)
+    app.state.profile_loader = ProfileLoader(redis, profile_account_client)
+
+    # Register intent handlers and create the orchestrator.
+    intent_router = IntentRouter()
+    intent_router.register(Intent.BALANCE_INQUIRY, BalanceInquiryHandler())
+    intent_router.register(Intent.TRANSACTION_DETAILS_INQUIRY, TransactionDetailsInquiryHandler())
+    intent_router.register(Intent.RECURRING_PAYMENT, RecurringPaymentHandler())
+    intent_router.register(Intent.EXPENSE_TRACKING, ExpenseTrackingHandler())
+    intent_router.register(Intent.PHOTO_CLAIM, PhotoClaimHandler())
+    app.state.orchestrator = Orchestrator(
+        intent_router,
+        account_client=app.state.account_client,
+        business_client=app.state.business_client,
+    )
+
+    # Wire up WhatsApp platform adapter.
+    whatsapp_client = WhatsAppClient(
+        phone_number_id=settings.whatsapp_phone_number_id,
+        access_token=settings.whatsapp_access_token,
+    )
+    whatsapp_verifier = WhatsAppWebhookVerifier(
+        verify_token=settings.whatsapp_verify_token,
+        app_secret=settings.whatsapp_app_secret,
+    )
+    app.state.whatsapp_adapter = WhatsAppAdapter(whatsapp_client, whatsapp_verifier)
+
+    platform_registry = PlatformRegistry()
+    platform_registry.register(app.state.whatsapp_adapter)
+    app.state.platform_registry = platform_registry
+
 
     # "yield" is the dividing line between startup and shutdown.
     # The server runs and handles requests while paused here.
@@ -85,6 +140,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Close the HTTP connection pools for the Java service clients.
     await app.state.account_client.aclose()
     await app.state.business_client.aclose()
+    await profile_account_client.aclose()
+    await whatsapp_client.aclose()
 
 
 # Create the FastAPI application instance.
@@ -98,6 +155,12 @@ app = FastAPI(title="iAgent Center", version="0.1.0", lifespan=lifespan)
 #   1. RequestIDMiddleware runs FIRST (outermost layer)
 #   2. AuthMiddleware runs SECOND
 # In Java Spring this is a Filter chain / OncePerRequestFilter.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8080", "http://localhost:5173", "http://localhost:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(AuthMiddleware)
 
@@ -107,3 +170,4 @@ app.add_middleware(AuthMiddleware)
 # In Java Spring this is like @RestController classes being picked up by component scan.
 app.include_router(health.router)
 app.include_router(chat.router)
+app.include_router(whatsapp_webhook.router)

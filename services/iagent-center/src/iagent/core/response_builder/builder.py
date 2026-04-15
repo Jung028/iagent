@@ -1,7 +1,7 @@
 from typing import Any
 
 from iagent.api.schemas.chat import ChatResponse
-from iagent.core.response_builder.card_factory import make_balance_card, make_error_card
+from iagent.core.response_builder.card_factory import make_balance_card, make_error_card, make_transaction_details_card
 from iagent.core.intent.models import Intent
 
 
@@ -28,6 +28,13 @@ def build_balance_response(accounts_data: list[dict[str, Any]]) -> ChatResponse:
         ui=make_balance_card(accounts_data),
 
         # False = no further action needed from the user for a balance inquiry.
+        requires_action=False,
+    )
+
+def build_transaction_details_response(transaction_details: dict[str, Any]) -> ChatResponse: 
+    return ChatResponse(
+        intent=Intent.TRANSACTION_DETAILS_INQUIRY,
+        ui=make_transaction_details_card(transaction_details),
         requires_action=False,
     )
 

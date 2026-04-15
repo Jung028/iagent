@@ -1,5 +1,6 @@
 from fastapi import Request, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
+from iagent.config import settings
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -19,6 +20,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # "in" checks if a value exists in a collection.
         # "request.url.path in self.EXEMPT_PATHS" is like Java's EXEMPT_PATHS.contains(path).
+        # Skip auth entirely in local development.
+        if settings.app_env == "development":
+            return await call_next(request)
+
         if request.url.path in self.EXEMPT_PATHS:
             # Pass straight through without checking auth.
             return await call_next(request)

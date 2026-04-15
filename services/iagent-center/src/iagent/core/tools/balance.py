@@ -61,7 +61,7 @@ async def handle(
         {
             "account_id": account["accountId"],
             "currency": balance["currency"],
-            "available": balance["available"],
+            "balance": balance["balance"],
             "pending": balance.get("pending", 0.0),
         }
     ]

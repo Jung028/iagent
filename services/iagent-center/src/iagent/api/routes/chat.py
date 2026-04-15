@@ -2,8 +2,7 @@ import structlog
 from fastapi import APIRouter, Request
 
 from iagent.api.schemas.chat import ChatRequest, ChatResponse
-from iagent.core.intent.models import Intent
-from iagent.core.response_builder.builder import build_balance_response, build_error_response
+from iagent.core.context.builder import ContextBuilder
 
 # Module-level logger — used to emit structured JSON log lines from this file.
 log = structlog.get_logger(__name__)
@@ -30,44 +29,29 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
     "http_request: Request" gives us access to the raw HTTP request (headers, app.state, etc.).
     FastAPI injects this automatically when it sees "Request" in the parameter list.
     In Java Spring this is like adding HttpServletRequest to the method parameters.
-    """ 
-    # get instance from classifier, account_client, wallet_client.
-    # Classifier is classify, call_llm, 
-    # account and wallet client, defined methods are : queryAccountInfo, 
-    # wallet : getBalance, getTransactions 
-    classifier = http_request.app.state.classifier
-    account_client = http_request.app.state.account_client
-    business_client = http_request.app.state.business_client
+    """
 
     # Step 1: Classify the user's message.
     # "await" pauses here until classify() finishes (it may call Redis or the LLM).
     # While paused, Python's event loop can handle other incoming requests — this is
     # what makes async I/O efficient vs Java's blocking threads.
-    intent_result = await classifier.classify(request.user_id, request.message)
-
-    # Step 2: Route to the correct action based on the classified intent.
-    if intent_result.intent == Intent.BALANCE_INQUIRY:
-        # get handle 
-        from iagent.core.tools.balance import handle
-        # query accounts 
-        accounts = await handle(
-            user_id=request.user_id,
-            account_client=account_client,
-            business_client=business_client,
-            # Pass the request ID so it gets forwarded to Java services for trace correlation.
-            # "getattr(obj, "attr", default)" safely reads an attribute, returning the default
-            # if it doesn't exist. In Java: Objects.toString(http_request.state.requestId, "")
-            request_id=getattr(http_request.state, "request_id", ""),
-            user_id_ctx=request.user_id,
-        )
-
-        # Step 3: Build and return the ChatResponse with a BalanceCard.
-        return build_balance_response(accounts)
-
-    # If the intent wasn't something we handle, return a friendly error card.
-    # "return" exits the function immediately — no "else" needed after a return.
-    return build_error_response(
-        intent=intent_result.intent,
-        code="unsupported_intent",
-        message="I can currently only help with balance inquiries.",
+    intent_result = await http_request.app.state.classifier.classify(
+        request.user_id, request.message
     )
+
+    # Step 2: Build the full request context.
+    # ContextBuilder.from_request is a static method (not a constructor), so we call it
+    # on the class directly — not with ContextBuilder(...).
+    # It is "async" (needs "await") because it may call Redis and iAccount internally.
+    # request_id is a plain string extracted from request.state — not the request object itself.
+    ctx = await ContextBuilder.from_request(
+        request=request,
+        intent_result=intent_result,
+        request_id=getattr(http_request.state, "request_id", ""),
+        session_store=getattr(http_request.app.state, "session_store", None),
+        profile_loader=getattr(http_request.app.state, "profile_loader", None),
+    )
+
+    # Step 3: Delegate to the orchestrator — it picks the right handler and returns the response.
+    # ctx must be passed in — without it the orchestrator has nothing to dispatch on.
+    return await http_request.app.state.orchestrator.run(ctx)

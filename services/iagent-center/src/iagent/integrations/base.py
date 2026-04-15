@@ -119,13 +119,15 @@ class BaseServiceClient:
             # In Java: "Circuit open for " + this.serviceName
 
         # Build the headers dict to send with every request.
-        # TODO: self._token_provider.get_token() will be awaited once implemented.
-        headers = {
-            "Authorization": f"Bearer {await self._token_provider.get_token()}",
-            "X-Request-ID": request_id,   # For end-to-end trace correlation
-            "X-User-ID": user_id,         # For Java service audit logging
+        # token_provider is None in local dev — skip the Authorization header.
+        # TODO: await self._token_provider.get_token() once M2M auth is implemented.
+        headers: dict[str, str] = {
+            "X-Request-ID": request_id,
+            "X-User-ID": user_id,
             "X-Workflow-ID": workflow_id,
         }
+        if self._token_provider is not None:
+            headers["Authorization"] = f"Bearer {await self._token_provider.get_token()}"
 
         # Retry loop: attempt the request up to _MAX_RETRIES times.
         # "range(1, _MAX_RETRIES + 1)" produces [1, 2, 3] — attempt numbers start at 1.

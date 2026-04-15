@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any
 
-from iagent.api.schemas.ui_cards import AccountBalance, BalanceCard, ErrorCard
+from iagent.api.schemas.ui_cards import AccountBalance, BalanceCard, ErrorCard, TransactionDetails, TransactionDetailsCard
 
 
 def make_balance_card(accounts_data: list[dict[str, Any]]) -> BalanceCard:
@@ -32,7 +32,7 @@ def make_balance_card(accounts_data: list[dict[str, Any]]) -> BalanceCard:
         AccountBalance(
             account_id=a["account_id"],  # a["key"] reads a dict value — like Java's Map.get("key")
             currency=a["currency"],
-            available=a["available"],
+            balance=a["balance"],
             pending=a.get("pending", 0.0),  # .get(key, default) — safe read with fallback
         )
         for a in accounts_data  # ← the loop part of the comprehension
@@ -44,6 +44,20 @@ def make_balance_card(accounts_data: list[dict[str, Any]]) -> BalanceCard:
     # The "as_of" field tells the mobile app WHEN the balance was fetched.
     return BalanceCard(accounts=accounts, as_of=datetime.now(tz=timezone.utc))
 
+def make_transaction_details_card(transaction_data: dict[str, Any]) -> TransactionDetailsCard:
+    return TransactionDetailsCard(
+        transaction_details=TransactionDetails(
+            account_id=transaction_data["account_id"],
+            txn_id=transaction_data["transaction_id"],   # key from tools/transaction.py
+            payee=transaction_data["payee_account_id"],
+            amount=transaction_data["amount"],
+            currency=transaction_data["currency"],
+            txn_type=transaction_data["txn_type"],
+            created_at=transaction_data["created_at"],
+            completed_at=transaction_data["completed_at"],
+        ) 
+    )
+    
 
 def make_error_card(code: str, message: str, recoverable: bool = True) -> ErrorCard:
     """Create an ErrorCard to display when something goes wrong.

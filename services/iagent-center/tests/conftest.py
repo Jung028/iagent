@@ -3,6 +3,16 @@ from unittest.mock import AsyncMock, MagicMock
 
 
 @pytest.fixture
+def mock_gemini_client():
+    client = MagicMock()
+    # Mocking the nested structure client.aio.models.generate_content
+    client.aio = MagicMock()
+    client.aio.models = MagicMock()
+    client.aio.models.generate_content = AsyncMock()
+    return client
+
+
+@pytest.fixture
 def mock_anthropic_client():
     client = MagicMock()
     client.messages = MagicMock()

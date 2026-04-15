@@ -34,12 +34,14 @@ class IAccountClient(BaseServiceClient):
             **ctx,
         )
 
+        print(user_id)
+        print(response.json())
         response.raise_for_status()
 
         # The Java service wraps the payload in AccountBizResult<AccountInfoItem>.
         # The actual account data lives in the "data" field.
         # In Java: result.getData()
-        return response.json()["data"]
+        return response.json()["result"]
 
     async def get_account_details(self, account_id: str, **ctx: str) -> dict[str, Any]:
         """Fetch details for a single account by its ID.
