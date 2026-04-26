@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     # Java backend service base URLs — all REQUIRED (no defaults).
     iaccount_base_url: str
     ibusiness_base_url: str
+    iuser_base_url: str
+
+    # JWT Authentication settings (Asymmetric RSA)
+    # jwt_public_key_path: Path to the .pem public key file.
+    # In local dev, we might use a dummy path or allow it to be optional.
+    jwt_public_key_path: str = "public_key.pem"
+    jwt_algorithm: str = "RS256"
 
     # WhatsApp Cloud API — all optional so the server starts without WhatsApp configured.
     # Get these from Meta Developer Console → WhatsApp → API Setup.

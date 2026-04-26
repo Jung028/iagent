@@ -106,6 +106,7 @@ class BaseServiceClient:
         request_id: str = "",   # Correlation ID for distributed tracing
         user_id: str = "",      # Forwarded to Java services for their own audit logs
         workflow_id: str = "",  # Future use — for multi-step workflow tracing
+        session_id: str = "",   # The user's session ID from the frontend
         **kwargs: Any,      # "**kwargs" captures any additional keyword arguments
                             # (like "json=", "params=") and forwards them to httpx.
                             # In Java: you'd have overloaded methods or a request options object.
@@ -125,6 +126,7 @@ class BaseServiceClient:
             "X-Request-ID": request_id,
             "X-User-ID": user_id,
             "X-Workflow-ID": workflow_id,
+            "X-Session-ID": session_id,
         }
         if self._token_provider is not None:
             headers["Authorization"] = f"Bearer {await self._token_provider.get_token()}"

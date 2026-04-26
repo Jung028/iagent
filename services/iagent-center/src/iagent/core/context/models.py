@@ -39,4 +39,5 @@ class AgentContext:
         return {
             "request_id": self.request_id,
             "workflow_id": self.session_id,
+            "session_id": self.session_id,
         }

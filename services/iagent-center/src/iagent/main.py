@@ -15,6 +15,8 @@ from google import genai
 
 # "import X as Y" is an alias. We import the redis async library but call it "aioredis"
 # so it's clear we're using the async version. In Java you'd just rename the variable.
+from iagent.core.orchestrator.handlers.transaction_analyze import TransactionAnalyzeInquiryHandler
+from iagent.core.validator.intent_validator import IntentValidator
 import redis.asyncio as aioredis
 
 from fastapi import FastAPI
@@ -29,17 +31,18 @@ from iagent.config import settings
 from iagent.core.intent.classifier import IntentClassifier
 from iagent.integrations.iaccount import IAccountClient
 from iagent.integrations.ibusiness import IBusinessClient
+from iagent.integrations.iuser import IUserClient
 from iagent.observability.logging import configure_logging
 from iagent.observability.metrics import configure_metrics
 from iagent.observability.tracing import configure_tracing
 from iagent.core.orchestrator import Orchestrator
 from iagent.core.orchestrator.router import IntentRouter
-from iagent.core.orchestrator.handlers.transaction_inquiry import TransactionDetailsInquiryHandler
+from iagent.core.orchestrator.handlers.transaction_details import TransactionDetailsInquiryHandler
 from iagent.core.orchestrator.handlers.balance_inquiry import BalanceInquiryHandler
 from iagent.core.orchestrator.handlers.recurring_payment import RecurringPaymentHandler
 from iagent.core.orchestrator.handlers.expense_tracking import ExpenseTrackingHandler
 from iagent.core.orchestrator.handlers.photo_claim import PhotoClaimHandler
-from iagent.core.intent.models import Intent
+from iagent.core.models.intent import Intent
 from iagent.core.context.session_store import SessionStore
 from iagent.core.context.profile_loader import ProfileLoader
 from iagent.integrations.platforms.registry import PlatformRegistry
@@ -87,6 +90,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.business_client = IBusinessClient(
         settings.ibusiness_base_url, "ibusiness", token_provider=None
     )
+    app.state.user_client = IUserClient(
+        settings.iuser_base_url, "iuser", token_provider=None
+    )
 
     # Wire up context services.
     # ProfileLoader gets its OWN IAccountClient instance so that connection
@@ -101,7 +107,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Register intent handlers and create the orchestrator.
     intent_router = IntentRouter()
     intent_router.register(Intent.BALANCE_INQUIRY, BalanceInquiryHandler())
-    intent_router.register(Intent.TRANSACTION_DETAILS_INQUIRY, TransactionDetailsInquiryHandler())
+    intent_router.register(Intent.TRANSACTION_DETAILS, TransactionDetailsInquiryHandler())
+    intent_router.register(Intent.TRANSACTION_ANALYZE, TransactionAnalyzeInquiryHandler())
+    # intent_router.register(Intent.TRANSACTION_SEARCH, TransactionHistoryInquiryHandler())
     intent_router.register(Intent.RECURRING_PAYMENT, RecurringPaymentHandler())
     intent_router.register(Intent.EXPENSE_TRACKING, ExpenseTrackingHandler())
     intent_router.register(Intent.PHOTO_CLAIM, PhotoClaimHandler())
@@ -109,6 +117,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         intent_router,
         account_client=app.state.account_client,
         business_client=app.state.business_client,
+        user_client=app.state.user_client,
     )
 
     # Wire up WhatsApp platform adapter.
@@ -140,6 +149,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Close the HTTP connection pools for the Java service clients.
     await app.state.account_client.aclose()
     await app.state.business_client.aclose()
+    await app.state.user_client.aclose()
     await profile_account_client.aclose()
     await whatsapp_client.aclose()
 

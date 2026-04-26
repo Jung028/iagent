@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any
 
-from iagent.api.schemas.ui_cards import AccountBalance, BalanceCard, ErrorCard, TransactionDetails, TransactionDetailsCard
+from iagent.api.schemas.ui_cards import AccountBalance, BalanceCard, ErrorCard, TransactionDetails, TransactionDetailsCard, TransactionHistoryCard
 
 
 def make_balance_card(accounts_data: list[dict[str, Any]]) -> BalanceCard:
@@ -56,6 +56,23 @@ def make_transaction_details_card(transaction_data: dict[str, Any]) -> Transacti
             created_at=transaction_data["created_at"],
             completed_at=transaction_data["completed_at"],
         ) 
+    )
+
+def make_transaction_history_card(transaction_history: list[dict[str, Any]]) -> TransactionHistoryCard:
+
+    return TransactionHistoryCard(
+        transaction_history=[
+            TransactionDetails(
+                account_id=t.get("accountId"),
+                txn_id=t.get("txnId"),
+                created_at=t.get("gmtCreate"),
+                amount=t.get("amount", 0.0),
+                currency=t.get("currency", "MYR"),
+                txn_status=t.get("status"),
+                ext_info=t.get("extInfo"),
+            )
+            for t in transaction_history
+        ]
     )
     
 

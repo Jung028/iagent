@@ -2,6 +2,7 @@ from typing import Any
 
 from iagent.integrations.iaccount import IAccountClient
 from iagent.integrations.ibusiness import IBusinessClient
+from iagent.integrations.iuser import IUserClient
 
 
 async def handle(
@@ -9,6 +10,7 @@ async def handle(
         transaction_id: str,
         account_client: IAccountClient,
         business_client: IBusinessClient,
+        user_client: IUserClient,
         **ctx: str,
 ) -> dict[str, Any]:
     """Fetch transaction details for a given user and transaction ID.

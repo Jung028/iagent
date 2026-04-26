@@ -2,6 +2,7 @@ from typing import Any
 
 from iagent.integrations.iaccount import IAccountClient
 from iagent.integrations.ibusiness import IBusinessClient
+from iagent.integrations.iuser import IUserClient
 
 # DEFINITION is the Anthropic "tool schema" for this tool.
 # It describes to Claude what this tool does and what arguments it needs.
@@ -27,6 +28,7 @@ async def handle(
     user_id: str,
     account_client: IAccountClient,
     business_client: IBusinessClient,
+    user_client: IUserClient,
     **ctx: str,      # "**ctx" captures any extra keyword arguments as a dict.
                      # The caller passes request_id=, user_id_ctx= etc.
                      # We then forward them to the HTTP clients as context headers.

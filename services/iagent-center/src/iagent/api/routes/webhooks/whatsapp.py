@@ -68,7 +68,11 @@ async def receive_message(http_request: Request) -> Response:
             intent_result = await classifier.classify(inbound.user_id, inbound.message)
 
             ctx = await ContextBuilder.from_request(
-                request=ChatRequest(user_id=inbound.user_id, message=inbound.message),
+                request=ChatRequest(
+                    user_id=inbound.user_id, 
+                    message=inbound.message,
+                    phoneNo=inbound.user_id  # For WhatsApp, user_id is the phone number
+                ),
                 intent_result=intent_result,
                 request_id=getattr(http_request.state, "request_id", ""),
                 session_store=getattr(http_request.app.state, "session_store", None),

@@ -5,7 +5,7 @@ from iagent.core.context.models import AgentContext
 from iagent.core.orchestrator.handlers.base import ToolHandler
 from iagent.core.orchestrator.result import OrchestratorResult
 from iagent.core.response_builder.builder import build_error_response
-from iagent.core.intent.models import Intent
+from iagent.core.models.intent import Intent
 
 log = structlog.get_logger(__name__)
 

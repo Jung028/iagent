@@ -1,7 +1,7 @@
 import hashlib  # Python's built-in cryptography library — like java.security.MessageDigest
 import json      # Python's built-in JSON library — like Jackson's ObjectMapper
 
-from iagent.core.intent.models import Intent, IntentResult
+from iagent.core.models.intent import Intent, IntentResult
 
 # How long (in seconds) to cache an intent classification result in Redis.
 # 300 seconds = 5 minutes. Declared as a module-level constant (like Java's static final).

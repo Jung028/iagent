@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 
 from iagent.core.intent.classifier import IntentClassifier
-from iagent.core.intent.models import Intent, IntentResult
+from iagent.core.models.intent import Intent, IntentResult
 
 
 def _make_gemini_response(intent: str, confidence: float = 0.95):

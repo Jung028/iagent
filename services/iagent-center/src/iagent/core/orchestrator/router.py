@@ -1,6 +1,6 @@
 import structlog
 
-from iagent.core.intent.models import Intent
+from iagent.core.models.intent import Intent
 
 log = structlog.get_logger(__name__)
 

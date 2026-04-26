@@ -65,3 +65,29 @@ class IBusinessClient(BaseServiceClient):
             "completed_at": result.get("gmtComplete"),
         }
     
+    async def query_transaction_history(self, account_id: str, params: dict, **ctx:Any) -> list[dict[str, Any]]: 
+
+        response = await self._request(
+            "POST",
+            "/business/basic/queryTransactionHistory.json",
+            # add more params for transaction history query. time range etc. 
+            json={"accountId":account_id,},
+            **params,
+            **ctx,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        result = payload.get("result")
+        transactions = result["transactions"]
+        return [
+            {
+                "txnId": t.get("txnId"),
+                "gmtCreate": t.get("gmtCreate"),
+                "amount": t.get("amount"),
+                "currency": t.get("currency"),
+                "status": t.get("status"),
+                "extInfo": t.get("extInfo"),
+            }
+            for t in transactions
+        ]
+    

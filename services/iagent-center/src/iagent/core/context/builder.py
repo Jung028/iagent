@@ -1,7 +1,7 @@
 from datetime import date
 
 from iagent.api.schemas.chat import ChatRequest
-from iagent.core.intent.models import IntentResult
+from iagent.core.models.intent import IntentResult
 from iagent.core.context.models import AgentContext
 
 
@@ -22,7 +22,7 @@ class ContextBuilder:
         """
         # session_id = user + calendar day → history resets each day naturally.
         # TODO: replace user_id prefix with JWT subject once AuthMiddleware is implemented.
-        session_id = f"{request.user_id}:{date.today().isoformat()}"
+        session_id = request.session_id or f"{request.user_id}:{date.today().isoformat()}"
 
         history = []
         if session_store is not None:
@@ -42,4 +42,5 @@ class ContextBuilder:
             entities=intent_result.entities,
             history=history,
             user_profile=user_profile,
+            platform_user_id=request.phone_no or "",
         )

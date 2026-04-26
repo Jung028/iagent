@@ -1,3 +1,7 @@
+from iagent.core.intent.contacts import INTENT_REQUIREMENTS
+from iagent.core.models.validation import ValidationStatus
+from iagent.core.response_builder.builder import build_error_response
+from iagent.core.validator.intent_validator import IntentValidator
 import structlog
 from fastapi import APIRouter, Request
 
@@ -51,6 +55,20 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
         session_store=getattr(http_request.app.state, "session_store", None),
         profile_loader=getattr(http_request.app.state, "profile_loader", None),
     )
+
+    #add a validation check to reprompt the user if the context is insufficient.
+    validate_result = await IntentValidator.validate(intent_result.intent.value, intent_result.entities)
+
+    # check if validate status is INSUFICCIENT_CONTEXT, and return the ui for this. 
+
+    if validate_result.status == ValidationStatus.INSUFICCIENT_CONTEXT:
+        return build_error_response(
+            intent=ctx.intent,
+            code="missing_required_fields",
+            message=validate_result.question or "Mising requried fields",
+        )
+
+    ctx.entities.update(validate_result.cleaned_entities)
 
     # Step 3: Delegate to the orchestrator — it picks the right handler and returns the response.
     # ctx must be passed in — without it the orchestrator has nothing to dispatch on.

@@ -2,7 +2,7 @@ import structlog
 from google import genai
 from google.genai import types
 
-from iagent.core.intent.models import Intent, IntentResult
+from iagent.core.models.intent import Intent, IntentResult
 from iagent.core.intent.prompts import EXTRACT_INTENT_TOOL, SYSTEM_PROMPT
 
 log = structlog.get_logger(__name__)
@@ -37,10 +37,15 @@ class IntentClassifier:
 
         # 2. LLM call
         try:
+            # result = IntentResult(
+            #     intent=Intent.BALANCE_INQUIRY,
+            #     confidence=0.0,
+            #     entities={}
+            # )
             result = IntentResult(
-                intent=Intent.TRANSACTION_DETAILS_INQUIRY,
+                intent=Intent.TRANSACTION_ANALYZE,
                 confidence=0.0,
-                entities={"txn_id":"000a1708-2655-4071-a53f-e54559d422ea"}
+                entities={"time_range":"02/22/12","metric":"009"}
             )
             # TODO: FOR debug purposes, we will hard code the LLM call result. 
             #result = await self._call_llm(message)

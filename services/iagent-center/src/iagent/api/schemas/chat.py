@@ -1,4 +1,6 @@
-from pydantic import BaseModel, Field
+from typing import Any, Dict
+
+from pydantic import BaseModel, Field, ConfigDict
 
 from iagent.api.schemas.ui_cards import AnyUICard
 
@@ -10,8 +12,15 @@ class ChatRequest(BaseModel):
     with Jackson deserializing the incoming JSON automatically.
     Pydantic does the same thing here.
     """
+    model_config = ConfigDict(populate_by_name=True)
 
     user_id: str  # The authenticated user's ID, e.g. "user-abc-123"
+
+    # The user's phone number, passed from the frontend session.
+    phone_no: str | None = Field(default=None, alias="phoneNo")
+
+    # The user's session ID, passed from the frontend session.
+    session_id: str | None = Field(default=None, alias="sessionId")
 
     # Field() lets us add constraints and metadata to a field.
     # "min_length=1" means the message cannot be empty (raises a 422 error if violated).

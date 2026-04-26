@@ -6,7 +6,7 @@ from datetime import datetime
 # "Annotated" lets you attach extra metadata to a type.
 # "Literal" means "this field can ONLY be this exact string value".
 # "Union" means "this can be one of several types" — like an interface with multiple implementations.
-from typing import Annotated, Literal, Union
+from typing import Annotated, List, Literal, Union
 
 # Pydantic is a data validation library — similar to Java's Bean Validation (javax.validation)
 # combined with Jackson for JSON serialization/deserialization.
@@ -39,6 +39,9 @@ class TransactionDetailsCard(BaseModel):
     type: Literal["transaction_details_card"] = "transaction_details_card"
     transaction_details: TransactionDetails
 
+class TransactionHistoryCard(BaseModel):
+    type: Literal["transaction_history_card"] = "transaction_history_card"
+    transaction_history: List[TransactionDetails]
 
 class BalanceCard(BaseModel):
     # "Literal["balance_card"]" means this field MUST always equal the string "balance_card".
@@ -85,6 +88,6 @@ class ErrorCard(BaseModel):
 # Pydantic instantiates a BalanceCard. When it sees "type": "error_card", it makes an ErrorCard.
 # In Java Jackson this is: @JsonTypeInfo(use=Id.NAME, property="type")
 AnyUICard = Annotated[
-    Union[BalanceCard, ErrorCard, TransactionDetailsCard],
+    Union[BalanceCard, ErrorCard, TransactionDetailsCard, TransactionHistoryCard],
     Field(discriminator="type"),
 ]

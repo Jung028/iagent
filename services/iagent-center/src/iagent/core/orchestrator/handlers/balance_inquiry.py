@@ -6,7 +6,7 @@ from iagent.core.orchestrator.handlers.base import ToolHandler
 from iagent.core.orchestrator.result import OrchestratorResult
 from iagent.core.tools.balance import handle as balance_handle
 from iagent.core.response_builder.builder import build_balance_response, build_error_response
-from iagent.core.intent.models import Intent
+from iagent.core.models.intent import Intent
 
 log = structlog.get_logger(__name__)
 
@@ -30,6 +30,7 @@ class BalanceInquiryHandler(ToolHandler):
                 user_id=ctx.user_id,
                 account_client=clients["account_client"],
                 business_client=clients["business_client"],
+                user_client=clients["user_client"],
                 **ctx.to_service_ctx(),
                 **extra,
             )

@@ -18,11 +18,14 @@ class Intent(StrEnum):
     # Each line is: MEMBER_NAME = "string_value"
     # The string value is what gets stored in JSON, Redis, logs, etc.
     BALANCE_INQUIRY = "balance_inquiry"
-    TRANSACTION_DETAILS_INQUIRY = "transaction_details_inquiry"
     RECURRING_PAYMENT = "recurring_payment"   # "pay rent RM1500 every 1st of the month"
     EXPENSE_TRACKING = "expense_tracking"     # "how much did I spend on food last month"
     PHOTO_CLAIM = "photo_claim"               # user sends a receipt image
     UNKNOWN = "unknown"
+    TRANSACTION_SEARCH = "transaction_search"
+    TRANSACTION_DETAILS = "transaction_details"
+    TRANSACTION_ANALYZE = "transaction_analyze"
+    TRANSFER = "transfer"
 
 
 # "@dataclass" is a decorator applied to the class below it.

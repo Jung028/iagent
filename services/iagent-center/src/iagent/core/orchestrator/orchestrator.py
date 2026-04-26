@@ -24,10 +24,12 @@ class Orchestrator:
     def __init__(self, 
                  router:IntentRouter, 
                  account_client: object, 
-                 business_client: object,) -> None :
+                 business_client: object,
+                 user_client: object,) -> None :
             self._router=router
             self._account_client=account_client
             self._business_client = business_client
+            self._user_client = user_client
 
     async def run(self, ctx: AgentContext) -> ChatResponse:
         handler = self._router.resolve(ctx.intent)
@@ -35,6 +37,8 @@ class Orchestrator:
               ctx,
               account_client = self._account_client,
               business_client = self._business_client,
+              user_client = self._user_client,
+
          )
 
         return result.to_chat_response()
