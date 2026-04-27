@@ -63,14 +63,21 @@ def make_transaction_history_card(transaction_history: list[dict[str, Any]]) -> 
     return TransactionHistoryCard(
         transaction_history=[
             TransactionDetails(
-                account_id=t.get("accountId"),
+                account_id=t.get("payeeAccountId"),
                 txn_id=t.get("txnId"),
+                txn_type=t.get("transactionType"),
                 created_at=t.get("gmtCreate"),
+                completed_at=t.get("completedAt"),
                 amount=t.get("amount", 0.0),
                 currency=t.get("currency", "MYR"),
-                txn_status=t.get("status"),
-                ext_info=t.get("extInfo"),
             )
+            # txn_id: str
+            # amount: float
+            # currency: str
+            # payee: str | None = None
+            # txn_type: str | None = None
+            # created_at: str | None = None
+            # completed_at: str | None = None
             for t in transaction_history
         ]
     )

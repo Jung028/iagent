@@ -54,6 +54,7 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
         request_id=getattr(http_request.state, "request_id", ""),
         session_store=getattr(http_request.app.state, "session_store", None),
         profile_loader=getattr(http_request.app.state, "profile_loader", None),
+        auth_token=http_request.headers.get("Authorization"),
     )
 
     #add a validation check to reprompt the user if the context is insufficient.

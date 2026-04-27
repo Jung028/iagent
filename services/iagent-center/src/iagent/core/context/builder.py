@@ -13,6 +13,7 @@ class ContextBuilder:
         request_id: str,
         session_store: object | None = None,
         profile_loader: object | None = None,
+        auth_token: str | None = None,
     ) -> AgentContext:
         """Build AgentContext from ChatRequest + IntentResult + request_id.
 
@@ -36,6 +37,7 @@ class ContextBuilder:
             user_id=request.user_id,
             request_id=request_id,
             session_id=session_id,
+            auth_token=auth_token,
             raw_message=request.message,
             intent=intent_result.intent,
             confidence=intent_result.confidence,

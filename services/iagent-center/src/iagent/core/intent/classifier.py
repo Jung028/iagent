@@ -29,9 +29,9 @@ class IntentClassifier:
     async def classify(self, user_id: str, message: str) -> IntentResult:
         from iagent.core.intent.cache import get_cached, set_cached
 
-        # 1. cache lookup (only safe hits)
+        # 1. cache lookup
         cached = await get_cached(self._redis, user_id, message)
-        if cached is not None and cached.intent != Intent.UNKNOWN:
+        if cached is not None:
             log.info("intent_cache_hit", user_id=user_id, intent=cached.intent)
             return cached
 
@@ -45,7 +45,7 @@ class IntentClassifier:
             result = IntentResult(
                 intent=Intent.TRANSACTION_ANALYZE,
                 confidence=0.0,
-                entities={"time_range":"02/22/12","metric":"009"}
+                entities={"time_range":"02/22/12"}
             )
             # TODO: FOR debug purposes, we will hard code the LLM call result. 
             #result = await self._call_llm(message)

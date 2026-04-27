@@ -42,7 +42,7 @@ INTENT_REQUIREMENTS: Dict[str, IntentContract] = {
         ],
     },
     "transaction_analyze": {
-        "required": ["time_range", "metric"],
+        "required": ["time_range"],
         "optional": [
             "group_by",
             "currency",

@@ -71,19 +71,23 @@ class IBusinessClient(BaseServiceClient):
             "POST",
             "/business/basic/queryTransactionHistory.json",
             # add more params for transaction history query. time range etc. 
-            json={"accountId":account_id,},
-            **params,
+            json={"accountId":account_id,
+                  **params,
+                  },
             **ctx,
         )
         response.raise_for_status()
-        payload = response.json()
-        result = payload.get("result")
-        transactions = result["transactions"]
+        payload = response.json() 
+        result = payload.get("result") or {}
+        transactions = result.get("transactions") or []
         return [
             {
                 "txnId": t.get("txnId"),
                 "gmtCreate": t.get("gmtCreate"),
                 "amount": t.get("amount"),
+                "payeeAccountId": t.get("payeeAccountId"),
+                "transactionType": t.get("transactionType"),
+                "gmtCompleted": t.get("gmtCompleted"),
                 "currency": t.get("currency"),
                 "status": t.get("status"),
                 "extInfo": t.get("extInfo"),

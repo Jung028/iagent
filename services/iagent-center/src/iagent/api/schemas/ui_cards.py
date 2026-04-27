@@ -26,11 +26,10 @@ class AccountBalance(BaseModel):
 
 
 class TransactionDetails(BaseModel):
-    account_id: str
+    account_id: str | None = None
     txn_id: str
     amount: float
     currency: str
-    payee: str | None = None
     txn_type: str | None = None
     created_at: str | None = None
     completed_at: str | None = None
