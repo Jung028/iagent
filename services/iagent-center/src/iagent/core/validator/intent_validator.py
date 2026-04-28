@@ -1,6 +1,6 @@
 from typing import Any, Dict
 
-from iagent.core.intent.contacts import INTENT_REQUIREMENTS
+from iagent.core.intent.intent_contract_requirements import INTENT_REQUIREMENTS
 from iagent.core.models.intent import Intent, IntentResult
 from iagent.core.models.validation import ValidationResult, ValidationStatus
 
@@ -21,9 +21,9 @@ class IntentValidator:
     ) -> ValidationResult:
         # 1: we check if the intent is within requireements list, else return ValidationResult unidentified /not supported intent
 
-        if intent not in INTENT_REQUIREMENTS: 
+        if intent not in INTENT_REQUIREMENTS:
             return ValidationResult(
-                status=ValidationStatus.INSUFICCIENT_CONTEXT,
+                status=ValidationStatus.UNKNOWN_INTENT,
                 cleaned_entities={},
                 missing=[],
             )
@@ -41,9 +41,9 @@ class IntentValidator:
                 missing.append(field)
         
         # -- if there is missing, we build the missing model, based on the intent
-        if missing: 
+        if missing:
             return ValidationResult(
-                status=ValidationStatus.INSUFICCIENT_CONTEXT,
+                status=ValidationStatus.INSUFFICIENT_CONTEXT,
                 missing=missing,
                 question=IntentValidator._build_question(intent, missing),
             )

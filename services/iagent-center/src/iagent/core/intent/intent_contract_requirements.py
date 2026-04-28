@@ -45,7 +45,6 @@ INTENT_REQUIREMENTS: Dict[str, IntentContract] = {
         "required": ["time_range"],
         "optional": [
             "group_by",
-            "currency",
             "txn_type",
             "status",
         ],

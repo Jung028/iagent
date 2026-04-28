@@ -16,6 +16,8 @@ from google import genai
 # "import X as Y" is an alias. We import the redis async library but call it "aioredis"
 # so it's clear we're using the async version. In Java you'd just rename the variable.
 from iagent.core.orchestrator.handlers.transaction_analyze import TransactionAnalyzeInquiryHandler
+from iagent.core.rag.planner import AnalysisPlanner
+from iagent.core.rag.analyzer import TransactionAnalyzer
 from iagent.core.validator.intent_validator import IntentValidator
 import redis.asyncio as aioredis
 
@@ -106,9 +108,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Register intent handlers and create the orchestrator.
     intent_router = IntentRouter()
+    planner = AnalysisPlanner(gemini_client)
+    analyzer = TransactionAnalyzer(gemini_client)
+
     intent_router.register(Intent.BALANCE_INQUIRY, BalanceInquiryHandler())
     intent_router.register(Intent.TRANSACTION_DETAILS, TransactionDetailsInquiryHandler())
-    intent_router.register(Intent.TRANSACTION_ANALYZE, TransactionAnalyzeInquiryHandler())
+    intent_router.register(Intent.TRANSACTION_ANALYZE, TransactionAnalyzeInquiryHandler(planner, analyzer))
     # intent_router.register(Intent.TRANSACTION_SEARCH, TransactionHistoryInquiryHandler())
     intent_router.register(Intent.RECURRING_PAYMENT, RecurringPaymentHandler())
     intent_router.register(Intent.EXPENSE_TRACKING, ExpenseTrackingHandler())

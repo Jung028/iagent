@@ -42,6 +42,20 @@ class TransactionHistoryCard(BaseModel):
     type: Literal["transaction_history_card"] = "transaction_history_card"
     transaction_history: List[TransactionDetails]
 
+
+class AnalysisSummary(BaseModel):
+    count: int | None = None
+    average: float | None = None
+    total: float | None = None
+    currency: str = "MYR"
+    survival_forecast: str | None = None
+    summary: str
+
+
+class TransactionAnalysisCard(BaseModel):
+    type: Literal["transaction_analysis_card"] = "transaction_analysis_card"
+    analysis: AnalysisSummary
+
 class BalanceCard(BaseModel):
     # "Literal["balance_card"]" means this field MUST always equal the string "balance_card".
     # It can never be anything else. The " = "balance_card" " sets the default value
@@ -87,6 +101,6 @@ class ErrorCard(BaseModel):
 # Pydantic instantiates a BalanceCard. When it sees "type": "error_card", it makes an ErrorCard.
 # In Java Jackson this is: @JsonTypeInfo(use=Id.NAME, property="type")
 AnyUICard = Annotated[
-    Union[BalanceCard, ErrorCard, TransactionDetailsCard, TransactionHistoryCard],
+    Union[BalanceCard, ErrorCard, TransactionDetailsCard, TransactionHistoryCard, TransactionAnalysisCard],
     Field(discriminator="type"),
 ]

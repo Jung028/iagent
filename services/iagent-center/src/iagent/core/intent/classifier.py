@@ -7,6 +7,7 @@ from iagent.core.intent.prompts import EXTRACT_INTENT_TOOL, SYSTEM_PROMPT
 
 log = structlog.get_logger(__name__)
 
+# change to anthropic API 
 MODEL = "gemini-2.5-flash"
 
 

@@ -1,7 +1,8 @@
 from typing import Any
 
 from iagent.api.schemas.chat import ChatResponse
-from iagent.core.response_builder.card_factory import make_balance_card, make_error_card, make_transaction_details_card, make_transaction_history_card
+from iagent.core.rag.analyzer import AnalysisResult
+from iagent.core.response_builder.card_factory import make_balance_card, make_error_card, make_transaction_analysis_card, make_transaction_details_card, make_transaction_history_card
 from iagent.core.models.intent import Intent
 
 
@@ -48,6 +49,14 @@ def build_error_response(intent: str, code: str, message: str) -> ChatResponse:
     return ChatResponse(
         intent=intent,
         ui=make_error_card(code=code, message=message, recoverable=True),
+        requires_action=False,
+    )
+
+
+def build_transaction_analysis_response(result: AnalysisResult) -> ChatResponse:
+    return ChatResponse(
+        intent=Intent.TRANSACTION_ANALYZE,
+        ui=make_transaction_analysis_card(result),
         requires_action=False,
     )
 

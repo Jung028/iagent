@@ -1,4 +1,4 @@
-from iagent.core.intent.contacts import INTENT_REQUIREMENTS
+from iagent.core.intent.intent_contract_requirements import INTENT_REQUIREMENTS
 from iagent.core.models.validation import ValidationStatus
 from iagent.core.response_builder.builder import build_error_response
 from iagent.core.validator.intent_validator import IntentValidator
@@ -60,13 +60,18 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
     #add a validation check to reprompt the user if the context is insufficient.
     validate_result = await IntentValidator.validate(intent_result.intent.value, intent_result.entities)
 
-    # check if validate status is INSUFICCIENT_CONTEXT, and return the ui for this. 
+    if validate_result.status == ValidationStatus.UNKNOWN_INTENT:
+        return build_error_response(
+            intent=ctx.intent,
+            code="unsupported_intent",
+            message="I'm not sure what you're asking. Try asking about your balance, transactions, or payments.",
+        )
 
-    if validate_result.status == ValidationStatus.INSUFICCIENT_CONTEXT:
+    if validate_result.status == ValidationStatus.INSUFFICIENT_CONTEXT:
         return build_error_response(
             intent=ctx.intent,
             code="missing_required_fields",
-            message=validate_result.question or "Mising requried fields",
+            message=validate_result.question or "I need a bit more information to help you.",
         )
 
     ctx.entities.update(validate_result.cleaned_entities)

@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 from typing import Any
 
-from iagent.api.schemas.ui_cards import AccountBalance, BalanceCard, ErrorCard, TransactionDetails, TransactionDetailsCard, TransactionHistoryCard
+from iagent.api.schemas.ui_cards import AccountBalance, AnalysisSummary, BalanceCard, ErrorCard, TransactionAnalysisCard, TransactionDetails, TransactionDetailsCard, TransactionHistoryCard
+from iagent.core.rag.analyzer import AnalysisResult
 
 
 def make_balance_card(accounts_data: list[dict[str, Any]]) -> BalanceCard:
@@ -82,6 +83,19 @@ def make_transaction_history_card(transaction_history: list[dict[str, Any]]) -> 
         ]
     )
     
+
+def make_transaction_analysis_card(result: AnalysisResult) -> TransactionAnalysisCard:
+    return TransactionAnalysisCard(
+        analysis=AnalysisSummary(
+            count=result.count,
+            average=result.average,
+            total=result.total,
+            currency=result.currency,
+            survival_forecast=result.survival_forecast,
+            summary=result.summary,
+        )
+    )
+
 
 def make_error_card(code: str, message: str, recoverable: bool = True) -> ErrorCard:
     """Create an ErrorCard to display when something goes wrong.
