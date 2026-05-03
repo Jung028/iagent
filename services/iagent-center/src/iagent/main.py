@@ -156,6 +156,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             session_factory=rag_session_factory,
             redis=redis,
             openai_api_key=settings.openai_api_key,
+            user_client=app.state.user_client,
         )
 
     # "yield" is the dividing line between startup and shutdown.
