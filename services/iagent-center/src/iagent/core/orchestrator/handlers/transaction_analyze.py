@@ -7,8 +7,6 @@ from iagent.core.models.intent import Intent
 from iagent.core.orchestrator.handlers.base import ToolHandler
 from iagent.core.orchestrator.mapper.mapper import map_entities_to_api_params
 from iagent.core.orchestrator.result import OrchestratorResult
-from iagent.core.rag.analyzer import TransactionAnalyzer
-from iagent.core.rag.planner import AnalysisPlanner
 from iagent.core.response_builder.builder import build_error_response, build_transaction_analysis_response
 from iagent.core.tools.transaction_history import handle as transaction_history_handle
 
@@ -25,10 +23,6 @@ class TransactionAnalyzeInquiryHandler(ToolHandler):
     This is the RAG augmented-generation step.
     """
 
-    def __init__(self, planner: AnalysisPlanner, analyzer: TransactionAnalyzer) -> None:
-        self._planner = planner
-        self._analyzer = analyzer
-
     async def execute(
         self,
         ctx: AgentContext,
@@ -44,6 +38,7 @@ class TransactionAnalyzeInquiryHandler(ToolHandler):
             business_client=clients["business_client"],
             user_client=clients["user_client"],
             params=params,
+            user_profile=ctx.user_profile,  
             **ctx.to_service_ctx(),
         )
 
@@ -61,18 +56,8 @@ class TransactionAnalyzeInquiryHandler(ToolHandler):
 
         log.info("transactions_fetched", count=len(transactions))
 
-        # 2. PLAN — ask LLM to decompose the question into analysis tasks
-        plan = await self._planner.plan(ctx.raw_message)
+        response = build_transaction_analysis_response(transactions)
 
-        # 3. ANALYZE — execute the plan against the transactions (RAG augmented generation)
-        result = await self._analyzer.analyze(
-            question=ctx.raw_message,
-            transactions=transactions,
-            plan=plan,
-        )
-
-        # 4. RESPOND
-        response = build_transaction_analysis_response(result)
         return OrchestratorResult(
             intent=response.intent,
             ui=response.ui,

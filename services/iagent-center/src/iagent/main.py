@@ -2,6 +2,7 @@
 # write startup/shutdown logic using Python's "yield" keyword.
 # Think of it as: everything BEFORE yield runs on startup, everything AFTER runs on shutdown.
 # In Java Spring Boot this is equivalent to @PostConstruct / @PreDestroy.
+import os
 from contextlib import asynccontextmanager
 
 # AsyncIterator is a type hint only — it tells other developers (and type checkers)
@@ -16,9 +17,9 @@ from google import genai
 # "import X as Y" is an alias. We import the redis async library but call it "aioredis"
 # so it's clear we're using the async version. In Java you'd just rename the variable.
 from iagent.core.orchestrator.handlers.transaction_analyze import TransactionAnalyzeInquiryHandler
-from iagent.core.rag.planner import AnalysisPlanner
-from iagent.core.rag.analyzer import TransactionAnalyzer
 from iagent.core.validator.intent_validator import IntentValidator
+from iagent.services.rag.database import create_engine_and_factory, create_tables
+from iagent.services.rag.rag_service import RAGService
 import redis.asyncio as aioredis
 
 from fastapi import FastAPI
@@ -108,12 +109,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Register intent handlers and create the orchestrator.
     intent_router = IntentRouter()
-    planner = AnalysisPlanner(gemini_client)
-    analyzer = TransactionAnalyzer(gemini_client)
 
     intent_router.register(Intent.BALANCE_INQUIRY, BalanceInquiryHandler())
     intent_router.register(Intent.TRANSACTION_DETAILS, TransactionDetailsInquiryHandler())
-    intent_router.register(Intent.TRANSACTION_ANALYZE, TransactionAnalyzeInquiryHandler(planner, analyzer))
+    intent_router.register(Intent.TRANSACTION_ANALYZE, TransactionAnalyzeInquiryHandler())
     # intent_router.register(Intent.TRANSACTION_SEARCH, TransactionHistoryInquiryHandler())
     intent_router.register(Intent.RECURRING_PAYMENT, RecurringPaymentHandler())
     intent_router.register(Intent.EXPENSE_TRACKING, ExpenseTrackingHandler())
@@ -140,6 +139,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     platform_registry.register(app.state.whatsapp_adapter)
     app.state.platform_registry = platform_registry
 
+    # Wire up RAG memory service — optional. Server starts without it if either
+    # DATABASE_URL or OPENAI_API_KEY is missing; RAG-dependent features are disabled.
+    app.state.rag_service = None
+    rag_engine = None
+    if not settings.database_url:
+        import structlog as _log
+        _log.get_logger(__name__).warning("rag_disabled", reason="DATABASE_URL not set in .env")
+    elif not settings.openai_api_key:
+        import structlog as _log
+        _log.get_logger(__name__).warning("rag_disabled", reason="OPENAI_API_KEY not set in .env")
+    else:
+        rag_engine, rag_session_factory = create_engine_and_factory()
+        await create_tables(rag_engine)
+        app.state.rag_service = RAGService(
+            session_factory=rag_session_factory,
+            redis=redis,
+            openai_api_key=settings.openai_api_key,
+        )
 
     # "yield" is the dividing line between startup and shutdown.
     # The server runs and handles requests while paused here.
@@ -150,6 +167,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Close the Redis connection pool gracefully.
     await redis.aclose()
+
+    # Dispose the RAG database engine connection pool (only if RAG was initialised).
+    if rag_engine is not None:
+        await rag_engine.dispose()
 
     # Close the HTTP connection pools for the Java service clients.
     await app.state.account_client.aclose()

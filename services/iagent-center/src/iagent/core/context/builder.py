@@ -14,6 +14,7 @@ class ContextBuilder:
         session_store: object | None = None,
         profile_loader: object | None = None,
         auth_token: str | None = None,
+        # can be used as an actual object instead of dict
         memory_context: dict | None = None, 
     ) -> AgentContext:
         """Build AgentContext from ChatRequest + IntentResult + request_id.
@@ -38,7 +39,7 @@ class ContextBuilder:
 
         # add an if the memory context is profile 
         if memory_context and memory_context.get("profile"):
-            user_profile = memory_context.get["profile"]
+            user_profile = memory_context.get("profile")
         else: 
             user_profile = None
             if profile_loader is not None:

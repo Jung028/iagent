@@ -12,13 +12,14 @@ async def handle(
     business_client: IBusinessClient,
     user_client: IUserClient,
     params: dict,
+    user_profile: dict | None = None,
     **ctx: Any,
 ) -> list[dict[str, Any]]:
     
     # we need to add a check here, to ensure that the user's request for the payeeName is someone within his contacts, 
     # check within the contact list, it should be able to handle even if half of the name is gone for example
     # send 20 to adam. or send 20 to ad
-    contact_config = await user_client.query_user_info(user_id, phone_no=phone_no, **ctx) or {}
+    contact_config = user_profile or await user_client.query_user_info(user_id, phone_no=phone_no, **ctx) or {}
 
     contact_cfg = contact_config.get("contactConfig") or {}
     contacts = contact_cfg.get("userContactList") or []
