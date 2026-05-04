@@ -146,16 +146,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if not settings.database_url:
         import structlog as _log
         _log.get_logger(__name__).warning("rag_disabled", reason="DATABASE_URL not set in .env")
-    elif not settings.openai_api_key:
-        import structlog as _log
-        _log.get_logger(__name__).warning("rag_disabled", reason="OPENAI_API_KEY not set in .env")
+    # elif not settings.openai_api_key:
+    #     import structlog as _log
+    #     _log.get_logger(__name__).warning("rag_disabled", reason="OPENAI_API_KEY not set in .env")
     else:
         rag_engine, rag_session_factory = create_engine_and_factory()
         await create_tables(rag_engine)
         app.state.rag_service = RAGService(
             session_factory=rag_session_factory,
             redis=redis,
-            openai_api_key=settings.openai_api_key,
             user_client=app.state.user_client,
         )
 

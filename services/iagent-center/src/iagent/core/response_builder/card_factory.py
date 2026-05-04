@@ -84,9 +84,33 @@ def make_transaction_history_card(transaction_history: list[dict[str, Any]]) -> 
     
 
 def make_transaction_analysis_card(transaction_history: list[dict[str, Any]]) -> TransactionAnalysisCard:
-    return TransactionAnalysisCard(
-        
+        # Extract amounts — skip any transactions where amount is missing
+    amounts = [t["amount"] for t in transaction_history if t.get("amount") is not None]
+
+    count = len(amounts)
+    total = sum(amounts)
+    average = total / count if count > 0 else 0.0
+
+    # Grab currency from the first transaction, fall back to MYR
+    currency = transaction_history[0].get("currency", "MYR") if transaction_history else "MYR"
+
+    # Plain summary for now — Claude will replace this string later
+    summary = (
+        f"You made {count} transaction(s) totalling {currency} {total:.2f}. "
+        f"Your average transaction was {currency} {average:.2f}."
     )
+
+    return TransactionAnalysisCard(
+        type="transaction_analysis_card",
+        analysis=AnalysisSummary(
+            count=count,
+            total=round(total, 2),
+            average=round(average, 2),
+            currency=currency,
+            summary=summary,
+        )
+    )
+    
 
 
 def make_error_card(code: str, message: str, recoverable: bool = True) -> ErrorCard:

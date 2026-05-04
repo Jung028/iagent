@@ -1,3 +1,4 @@
+from iagent.core.context.service_context import ServiceContext
 from iagent.core.intent.intent_contract_requirements import INTENT_REQUIREMENTS
 from iagent.core.models.validation import ValidationStatus
 from iagent.core.response_builder.builder import build_error_response
@@ -20,11 +21,19 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
     rag_service = getattr(http_request.app.state, "rag_service", None)
     memory_context: dict = {}
     if rag_service:
+        service_context = ServiceContext(
+            user_id=request.user_id,
+            phone_no=request.phone_no,
+            request_id=getattr(http_request.state, "request_id", ""),
+            session_id=request.session_id or "",
+            auth_token=http_request.headers.get("Authorization"),
+        )
         # get context from RAG, includes profile, entities, recent messages.
         memory_context = await rag_service.get_context(
             user_id=request.user_id,
             message=request.message,
             thread_id=getattr(request, "thread_id", None),
+            service_ctx=service_context,
         )
 
     intent_result = await http_request.app.state.classifier.classify(

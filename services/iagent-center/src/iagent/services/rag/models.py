@@ -67,7 +67,7 @@ class Interaction(WriteBase):
         PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     thread_id: Mapped[uuid.UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("threads.thread_id")
+        PG_UUID(as_uuid=True), ForeignKey("thread.thread_id")
     )
     user_id: Mapped[int] = mapped_column(BigInteger)
     role: Mapped[str] = mapped_column(Text)
@@ -75,5 +75,5 @@ class Interaction(WriteBase):
     intents: Mapped[dict] = mapped_column(JSONB, default=dict)
     entities: Mapped[dict] = mapped_column(JSONB, default=dict)
     result: Mapped[dict] = mapped_column(JSONB, default=dict)
-    embedding: Mapped[list | None] = mapped_column(Vector(1536))
+    embedding: Mapped[list | None] = mapped_column(Vector(384))
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True))

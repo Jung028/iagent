@@ -3,6 +3,8 @@ import json
 import uuid
 from typing import Any
 
+from iagent.core.context.service_context import ServiceContext
+from sentence_transformers import SentenceTransformer
 import structlog
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
@@ -27,13 +29,12 @@ class RAGService:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         redis: Any,
-        openai_api_key: str,
         user_client: IUserClient,   # injected — same instance used by the orchestrator
     ) -> None:
         self._session_factory = session_factory
         self._redis = redis
-        self._openai = AsyncOpenAI(api_key=openai_api_key)
         self._user_client = user_client   # HTTP client to the Java user center
+        self._model = SentenceTransformer("all-MiniLM-L6-v2")
 
     """
     Get the context for the RAG agent to pass in during chat in ctx. 
@@ -43,9 +44,14 @@ class RAGService:
         user_id: str,
         message: str,
         thread_id: str | None = None,
+        service_ctx: ServiceContext | None = None,   
     ) -> dict:
         int_user_id = _parse_user_id(user_id)
         uuid_thread_id = _parse_uuid(thread_id)
+
+        ctx_kwargs = service_ctx.to_kwargs() if service_ctx else {}
+        phone_no = service_ctx.phone_no if service_ctx else None
+
 
         profile = None
         entities_list: list = []
@@ -58,11 +64,9 @@ class RAGService:
                 thread_repo = ThreadRepository(session)
                 interaction_repo = InteractionRepository(session)
 
-                # Run DB queries and the HTTP user-info call concurrently.
-                # phone_no=None is fine — the Java endpoint accepts userId alone.
-                # user_id must be str for the HTTP client; int_user_id is only for the DB repos.
+                # TODO: need to pass in phone no. 
                 results = await asyncio.gather(
-                    self._user_client.query_user_info(user_id),
+                    self._user_client.query_user_info(user_id, phone_no=phone_no, **ctx_kwargs),
                     entity_repo.query_user_entity_by_user_id(int_user_id),
                     thread_repo.query_by_thread_id(uuid_thread_id) if uuid_thread_id else _noop(),
                     interaction_repo.query_recent_interaction_by_thread(uuid_thread_id) if uuid_thread_id else _noop(),
@@ -179,11 +183,13 @@ class RAGService:
             log.error("rag.store_failed", user_id=user_id, error=str(exc))
 
     async def _get_embedding(self, text: str) -> list[float]:
-        response = await self._openai.embeddings.create(
-            model="text-embedding-3-small",
-            input=text,
+        # SentenceTransformer is synchronous — run in thread pool so it
+        # doesn't block the async event loop
+        loop = asyncio.get_event_loop()
+        embedding = await loop.run_in_executor(
+            None, self._model.encode, text
         )
-        return response.data[0].embedding
+        return embedding.tolist()
 
 
 def _parse_user_id(user_id: str) -> int | None:

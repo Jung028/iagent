@@ -28,7 +28,7 @@ class TransactionAnalyzeInquiryHandler(ToolHandler):
         ctx: AgentContext,
         **clients: Any,
     ) -> OrchestratorResult:
-        params = map_entities_to_api_params(ctx.entities)
+        params = ctx.entities
 
         # 1. RETRIEVAL — fetch transactions from iWallet
         transactions = await transaction_history_handle(

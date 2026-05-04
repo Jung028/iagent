@@ -46,7 +46,7 @@ class IntentClassifier:
             result = IntentResult(
                 intent=Intent.TRANSACTION_ANALYZE,
                 confidence=0.0,
-                entities={"time_range":"02/22/12"}
+                entities={"time_range":"2026-03-11 22:24:14.179858"}
             )
             # TODO: FOR debug purposes, we will hard code the LLM call result. 
             #result = await self._call_llm(message)

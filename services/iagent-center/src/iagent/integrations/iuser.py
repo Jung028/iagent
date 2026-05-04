@@ -4,7 +4,7 @@ from iagent.integrations.base import BaseServiceClient
 
 
 class IUserClient(BaseServiceClient): 
-    async def query_user_info(self, user_id: str, phone_no: str | None = None, **ctx: str) -> dict[str, Any]:
+    async def query_user_info(self, user_id: str, phone_no: str, **ctx: str) -> dict[str, Any]:
         """Fetch the single account belonging to a user (1:1 relationship).
 
         Calls POST /user/basic/queryUserInfo.json on the user center.
