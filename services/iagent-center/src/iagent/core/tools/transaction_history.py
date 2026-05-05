@@ -5,8 +5,22 @@ from iagent.integrations.ibusiness import IBusinessClient
 from iagent.integrations.iuser import IUserClient
 from difflib import get_close_matches
 
+from typing import Any
+
+from iagent.integrations.iaccount import IAccountClient
+from iagent.integrations.ibusiness import IBusinessClient
+from iagent.integrations.iuser import IUserClient
+from difflib import get_close_matches
+
+# Fields that BusinessTransactionHistoryRequest accepts — anything else is stripped
+_ALLOWED_PARAMS = {
+    "gmtCreate", "payerAccountId", "payerName",
+    "txnType", "txnStatus", "amountMin", "amountMax",
+    "category", "pageNo", "pageSize",
+}
+
 async def handle(
-    user_id:str,
+    user_id: str,
     phone_no: str,
     account_client: IAccountClient,
     business_client: IBusinessClient,
@@ -15,46 +29,42 @@ async def handle(
     user_profile: dict | None = None,
     **ctx: Any,
 ) -> list[dict[str, Any]]:
-    
-    # we need to add a check here, to ensure that the user's request for the payeeName is someone within his contacts, 
-    # check within the contact list, it should be able to handle even if half of the name is gone for example
-    # send 20 to adam. or send 20 to ad
-    user_info = user_profile or await user_client.query_user_info(user_id, phone_no=phone_no, **ctx) or {}
 
-    contact_cfg = user_info.get("contactConfig") or {}
-    contacts = contact_cfg.get("userContactList") or []
+    # Only do contact lookup if payeeName was actually provided
+    payee_name = params.get("payeeName")
+    if payee_name and payee_name.strip():
+        user_info = user_profile or await user_client.query_user_info(user_id, phone_no=phone_no, **ctx) or {}
+        contact_cfg = user_info.get("contactConfig") or {}
+        contacts = contact_cfg.get("userContactList") or []
+        names = [c.get("displayName", "") for c in contacts if isinstance(c, dict)]
 
-    payeeName = params.get("payeeName")
+        if names:
+            matches = get_close_matches(payee_name, names, n=1, cutoff=0.5)
+            if matches:
+                matched_name = matches[0]
+                match = next((c for c in contacts if c["displayName"] == matched_name), None)
+                if match:
+                    payerAccount = await account_client.get_account_by_user_id(match["userId"], **ctx)
+                    params["payerAccountId"] = payerAccount["accountId"]
 
-    names = [
-        c.get("displayName", "")
-        for c in contacts
-        if isinstance(c, dict)
-    ]
-    # if names not present in contacts list, then return "no contacts list"
-    if not names: 
-        return None
-     
-    if names is not None and payeeName and payeeName.strip():
-        # if the payeeName is not present in the first place, continue query transaction history with the other 
-        # required parameters
-        matches = get_close_matches(payeeName, names, n=1, cutoff=0.5)
-        if matches:
-            matched_name = matches[0]
-            match = next(c for c in contacts if c["displayName"] == matched_name)
+    # Strip any LLM fields Java doesn't know about (e.g. payeeName, confidence)
+    clean_params = {k: v for k, v in params.items() if k in _ALLOWED_PARAMS}
 
-        if match:
-            # get payerAccountId by userId 
-            payerAccount = await account_client.get_account_by_user_id(match["userId"], **ctx)
-            params["payerAccountId"] = payerAccount["accountId"]
-    
-    
+    #clean up gmtCreate to fit the ISO format 
+    if "gmtCreate" in clean_params and clean_params["gmtCreate"]:
+        gmt = str(clean_params["gmtCreate"]).strip().strip('"').strip("'")
+        gmt = gmt.split("+")[0].strip()   # strip timezone offset
+        gmt = gmt.replace(" ", "T")       # space → T
+        if "T" not in gmt:
+            gmt = f"{gmt}T00:00:00"
+        gmt = gmt[:19]                    # truncate to "YYYY-MM-DDTHH:MM:SS" — drop microseconds
+        clean_params["gmtCreate"] = gmt
 
-    # fetch the list of transaction history from the ibusiness, by passing in the account Id, so we query iaccount first, 
+    # Fetch account ID then query
     account = await account_client.get_account_by_user_id(user_id, **ctx)
     account_id = account["accountId"]
 
-    transaction_history_result = await business_client.query_transaction_history(account_id, params, **ctx)
+    transaction_history_result = await business_client.query_transaction_history(account_id, clean_params, **ctx)
     transactions = transaction_history_result or []
 
     return [

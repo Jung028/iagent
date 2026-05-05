@@ -36,9 +36,9 @@ class Settings(BaseSettings):
     app_port: int = 8000           # int is Python's int (no Integer wrapper class needed)
     log_level: str = "info"
 
-    # Gemini API key — NO default value = REQUIRED.
-    # Get yours from https://aistudio.google.com/apikey
-    gemini_api_key: str
+    # Anthropic API key — NO default value = REQUIRED.
+    # Get yours from https://console.anthropic.com/settings/keys
+    anthropic_api_key: str
 
     # Redis connection string. Has a default so it's optional in .env.
     redis_url: str = "redis://localhost:6379/0"

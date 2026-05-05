@@ -18,13 +18,38 @@ INTENT DEFINITIONS:
 - top_up               : user wants to add money to their eWallet (top up, reload, add funds)
 - unknown              : does not match any supported intent
 
-DATE RULE — always resolve relative dates to a YYYY-MM-DD string using today's date ({today}):
-- "last month"    → first day of last month        e.g. 2026-04-01
-- "this month"    → first day of current month     e.g. 2026-05-01
-- "last 3 months" → date 3 months ago              e.g. 2026-02-04
-- "last week"     → date 7 days ago                e.g. 2026-04-27
-- "this year"     → first day of current year      e.g. 2026-01-01
+DATE RULE — always resolve to ISO-8601 datetime string "YYYY-MM-DDTHH:MM:SS" using today's date ({today}):
+- "last month"      → first day of last month at midnight   e.g. 2026-04-01T00:00:00
+- "this month"      → first day of current month            e.g. 2026-05-01T00:00:00
+- "last 3 months"   → date 3 months ago at midnight         e.g. 2026-02-05T00:00:00
+- "last week"       → date 7 days ago at midnight           e.g. 2026-04-28T00:00:00
+- "this year"       → first day of current year             e.g. 2026-01-01T00:00:00
+- "after 4pm today" → today at that time                    e.g. 2026-05-05T16:00:00
+- "this morning"    → today at 06:00:00                     e.g. 2026-05-05T06:00:00
+- "yesterday"       → yesterday at midnight                 e.g. 2026-05-04T00:00:00
+- Date only, no time mentioned → default time to T00:00:00
 - If no date is mentioned, omit gmtCreate entirely.
+
+TRANSACTION FILTER RULES:
+- txnType: only set if the user explicitly says a type ("show my top-ups" → TOP_UP, "transfers only" → TRANSFER, "refunds" → REFUND, "deposits" → DEPOSIT)
+- txnStatus: "pending" → PENDING, "completed/done/successful" → FINISH, "failed" → FAILED
+- amountMin/amountMax: extract numeric values when user says "more than 50", "under 200", "between 10 and 100"
+- Do NOT guess or infer txnType/txnStatus if the user hasn't mentioned them.
+
+CATEGORY RULE — map the user's natural language to the exact category code:
+- "groceries / supermarket / wet market / pasar"        → GROCERIES
+- "food / restaurant / cafe / mamak / dining / eat/makan" → FOOD_DINING
+- "transport / grab / bus / lrt / toll / ride / taxi"   → TRANSPORT
+- "fuel / petrol / gas / RON"                           → FUEL
+- "shopping / retail / clothes / online / lazada"       → SHOPPING
+- "entertainment / movie / cinema / games / streaming"  → ENTERTAINMENT
+- "utilities / electricity / TNB / water / telco / bill"→ UTILITIES
+- "rent / rental / landlord"                            → RENT
+- "healthcare / clinic / doctor / pharmacy / hospital"  → HEALTHCARE
+- "education / school / tuition / course / university"  → EDUCATION
+- "transfer / sent to / paid person"                    → TRANSFER
+- "top up / reload / add funds"                         → TOP_UP
+- Only set category if the user explicitly mentions a spending type.
 
 TRANSFER RULE:
 - payeeAccountNo is the recipient's exact account number (only if user states it explicitly)
@@ -74,9 +99,9 @@ EXTRACT_INTENT_TOOL = {
                     "gmtCreate": {
                         "type": "string",
                         "description": (
-                            "Date filter in YYYY-MM-DD format. "
-                            "Resolve relative dates using today's date. "
-                            "Examples: 'last month' → '2026-04-01', 'this month' → '2026-05-01'."
+                            "Datetime filter in ISO-8601 format 'YYYY-MM-DDTHH:MM:SS'. "
+                            "Always include the T and time part — default to T00:00:00 if user only mentions a date. "
+                            "Examples: 'last month' → '2026-04-01T00:00:00', 'after 4pm today' → '2026-05-05T16:00:00'."
                         ),
                     },
                     "payerAccountId": {
@@ -86,6 +111,53 @@ EXTRACT_INTENT_TOOL = {
                     "payerName": {
                         "type": "string",
                         "description": "Filter transactions by payer's display name.",
+                    },
+                    "txnType": {
+                        "type": "string",
+                        "enum": ["TRANSFER", "REFUND", "DEPOSIT", "TOP_UP"],
+                        "description": (
+                            "Filter by transaction type. "
+                            "Use when user says 'show my top-ups', 'only transfers', 'refunds', etc."
+                        ),
+                    },
+                    "txnStatus": {
+                        "type": "string",
+                        "enum": ["PENDING", "FINISH", "FAILED"],
+                        "description": (
+                            "Filter by transaction status. "
+                            "FINISH = completed. Use when user says 'pending', 'failed', 'completed'."
+                        ),
+                    },
+                    "amountMin": {
+                        "type": "number",
+                        "description": "Minimum transaction amount. Use when user says 'more than X' or 'above X'.",
+                    },
+                    "amountMax": {
+                        "type": "number",
+                        "description": "Maximum transaction amount. Use when user says 'less than X' or 'under X'.",
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": [
+                            "GROCERIES",
+                            "FOOD_DINING",
+                            "TRANSPORT",
+                            "FUEL",
+                            "SHOPPING",
+                            "ENTERTAINMENT",
+                            "UTILITIES",
+                            "RENT",
+                            "HEALTHCARE",
+                            "EDUCATION",
+                            "TRANSFER",
+                            "TOP_UP",
+                            "OTHER",
+                        ],
+                        "description": (
+                            "Transaction spending category. "
+                            "Map the user's natural language to the closest category code. "
+                            "Only set if the user explicitly mentions a spending type."
+                        ),
                     },
                     "pageNo": {
                         "type": "integer",

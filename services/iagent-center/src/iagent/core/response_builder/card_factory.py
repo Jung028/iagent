@@ -110,6 +110,22 @@ def make_transaction_analysis_card(transaction_history: list[dict[str, Any]]) ->
             summary=summary,
         )
     )
+
+def make_transaction_search_card(transaction_history: list[dict[str, Any]]) -> TransactionHistoryCard: 
+    return TransactionHistoryCard(
+        transaction_history=[
+            TransactionDetails(
+                account_id=t.get("payeeAccountId"),
+                txn_id=t.get("txnId"),
+                txn_type=t.get("transactionType"),
+                created_at=t.get("gmtCreate"),
+                completed_at=t.get("completedAt"),
+                amount=t.get("amount", 0.0),
+                currency=t.get("currency", "MYR"),
+            )
+            for t in transaction_history
+        ]
+    )
     
 
 

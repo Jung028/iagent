@@ -12,11 +12,12 @@ from typing import AsyncIterator
 
 # "import X" brings the whole module in. You then use it as "anthropic.AsyncAnthropic()"
 # This is like Java's "import com.anthropic.*" — you keep the namespace prefix.
-from google import genai
+import anthropic
 
 # "import X as Y" is an alias. We import the redis async library but call it "aioredis"
 # so it's clear we're using the async version. In Java you'd just rename the variable.
 from iagent.core.orchestrator.handlers.transaction_analyze import TransactionAnalyzeInquiryHandler
+from iagent.core.orchestrator.handlers.transaction_search import TransctionSearchInquiryHandler
 from iagent.core.validator.intent_validator import IntentValidator
 from iagent.services.rag.database import create_engine_and_factory, create_tables
 from iagent.services.rag.rag_service import RAGService
@@ -77,13 +78,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # "aioredis.from_url()" returns an async Redis client (non-blocking I/O).
     redis = aioredis.from_url(settings.redis_url)
 
-    # Create the Gemini client with our API key from config.
-    gemini_client = genai.Client(api_key=settings.gemini_api_key)
+    # Create the Anthropic async client for intent classification.
+    anthropic_client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
-    # Create our IntentClassifier, passing it the Gemini client and Redis.
+    # Create our IntentClassifier, passing it the Anthropic client and Redis.
     # Then attach it to "app.state" — this is FastAPI's way of storing shared objects
     # that all route handlers can access. In Java Spring this would be @Autowired injection.
-    app.state.classifier = IntentClassifier(gemini_client, redis)
+    app.state.classifier = IntentClassifier(anthropic_client, redis)
 
     # Create the two Java backend service clients and store them on app.state too.
     # token_provider=None means M2M auth is not yet implemented (TODO for Sprint 3).
@@ -113,7 +114,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     intent_router.register(Intent.BALANCE_INQUIRY, BalanceInquiryHandler())
     intent_router.register(Intent.TRANSACTION_DETAILS, TransactionDetailsInquiryHandler())
     intent_router.register(Intent.TRANSACTION_ANALYZE, TransactionAnalyzeInquiryHandler())
-    # intent_router.register(Intent.TRANSACTION_SEARCH, TransactionHistoryInquiryHandler())
+    intent_router.register(Intent.TRANSACTION_SEARCH, TransctionSearchInquiryHandler())
     intent_router.register(Intent.RECURRING_PAYMENT, RecurringPaymentHandler())
     intent_router.register(Intent.EXPENSE_TRACKING, ExpenseTrackingHandler())
     intent_router.register(Intent.PHOTO_CLAIM, PhotoClaimHandler())

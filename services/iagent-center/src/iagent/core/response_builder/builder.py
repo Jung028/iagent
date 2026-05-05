@@ -1,7 +1,7 @@
 from typing import Any
 
 from iagent.api.schemas.chat import ChatResponse
-from iagent.core.response_builder.card_factory import make_balance_card, make_error_card, make_transaction_analysis_card, make_transaction_details_card, make_transaction_history_card
+from iagent.core.response_builder.card_factory import make_balance_card, make_error_card, make_transaction_analysis_card, make_transaction_details_card, make_transaction_history_card, make_transaction_search_card
 from iagent.core.models.intent import Intent
 
 
@@ -59,6 +59,12 @@ def build_transaction_analysis_response(result: list[dict[str, Any]]) -> ChatRes
         requires_action=False,
     )
 
+def build_transaction_search_response(result: list[dict[str, Any]]) -> ChatResponse: 
+    return ChatResponse(
+        intent=Intent.TRANSACTION_SEARCH,
+        ui=make_transaction_search_card(result),
+        requires_action=False,
+    )
 
 def build_transaction_history_response(transaction_history: list[dict[str, Any]]) -> ChatResponse:
     return ChatResponse(

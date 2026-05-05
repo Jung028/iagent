@@ -82,6 +82,9 @@ class RAGService:
             raw_recent = results[3] if not isinstance(results[3], Exception) else []
             recent_messages = [{"role": m.role, "content": m.message} for m in (raw_recent or [])]
 
+            print(thread)
+
+
         # Semantic search — runs AFTER the session is closed so we don't hold a DB
         # connection open during the OpenAI embedding API call.
         relevant_history: list = []

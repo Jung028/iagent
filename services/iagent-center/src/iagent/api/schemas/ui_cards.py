@@ -42,7 +42,6 @@ class TransactionHistoryCard(BaseModel):
     type: Literal["transaction_history_card"] = "transaction_history_card"
     transaction_history: List[TransactionDetails]
 
-
 class AnalysisSummary(BaseModel):
     count: int | None = None
     average: float | None = None
