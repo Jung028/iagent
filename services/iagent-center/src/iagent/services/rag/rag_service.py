@@ -3,10 +3,10 @@ import json
 import uuid
 from typing import Any
 
+import anthropic
 from iagent.core.context.service_context import ServiceContext
 from sentence_transformers import SentenceTransformer
 import structlog
-from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 from iagent.integrations.iuser import IUserClient
@@ -19,6 +19,14 @@ from .repositories import (
 
 log = structlog.get_logger(__name__)
 
+_SUMMARY_MODEL = "claude-haiku-4-5"
+_SUMMARY_SYSTEM = """\
+You are a summarisation assistant. Given a list of conversation turns from an eWallet chatbot, \
+write ONE concise paragraph (2-4 sentences) describing what happened: what the user asked for, \
+what actions were taken, and any relevant outcomes (balances, transaction IDs, etc.). \
+Plain text only — no markdown, no bullet points.
+"""
+
 
 async def _noop() -> None:
     return None
@@ -29,11 +37,13 @@ class RAGService:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         redis: Any,
-        user_client: IUserClient,   # injected — same instance used by the orchestrator
+        user_client: IUserClient,
+        anthropic_client: anthropic.AsyncAnthropic | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._redis = redis
-        self._user_client = user_client   # HTTP client to the Java user center
+        self._user_client = user_client
+        self._anthropic = anthropic_client
         self._model = SentenceTransformer("all-MiniLM-L6-v2")
 
     """
@@ -109,6 +119,7 @@ class RAGService:
             "profile": profile,
             "entities": {e.key: e.value for e in entities_list},
             "thread_id": str(thread.thread_id) if thread else (thread_id or ""),
+            "thread_summary": thread.summary if thread else None,
             "recent_messages": recent_messages,
             "relevant_history": relevant_history,
             "session": session_data,
@@ -176,14 +187,113 @@ class RAGService:
                 try:
                     await self._redis.setex(
                         f"session:{user_id}",
-                        3600,  # 1 hour TTL
+                        3600,
                         json.dumps({"thread_id": str(thread_obj.thread_id)}),
                     )
                 except Exception as exc:
                     log.warning("rag.redis_write_failed", user_id=user_id, error=str(exc))
 
+                # Generate and persist a fresh summary in the background.
+                if self._anthropic:
+                    asyncio.create_task(
+                        self._refresh_summary(thread_obj.thread_id)
+                    )
+
         except Exception as exc:
             log.error("rag.store_failed", user_id=user_id, error=str(exc))
+
+    # ── Thread listing & detail ───────────────────────────────────────────────
+
+    async def list_threads(self, user_id: str) -> list[dict]:
+        """Return all threads for a user ordered by most recently modified."""
+        int_user_id = _parse_user_id(user_id)
+        if int_user_id is None:
+            return []
+        async with self._session_factory() as session:
+            threads = await ThreadRepository(session).query_by_user_id(int_user_id)
+        return [
+            {
+                "thread_id":  str(t.thread_id),
+                "summary":    t.summary,
+                "created_at": t.created_at,
+                "updated_at": t.updated_at,
+            }
+            for t in threads
+        ]
+
+    async def get_thread_detail(self, thread_id: str) -> dict:
+        """Return a thread's metadata + all interactions ordered oldest → newest."""
+        uuid_thread_id = _parse_uuid(thread_id)
+        if uuid_thread_id is None:
+            return {"thread_id": thread_id, "summary": None, "interactions": []}
+
+        async with self._session_factory() as session:
+            thread, interactions = await asyncio.gather(
+                ThreadRepository(session).query_by_thread_id(uuid_thread_id),
+                InteractionRepository(session).query_all_by_thread(uuid_thread_id),
+            )
+
+        return {
+            "thread_id":    thread_id,
+            "summary":      thread.summary if thread else None,
+            "interactions": [
+                {
+                    "id":         str(i.id),
+                    "role":       i.role,
+                    "message":    i.message or None,
+                    "result":     i.result or None,
+                    "created_at": i.created_at,
+                }
+                for i in interactions
+            ],
+        }
+
+    # ── Summary generation ────────────────────────────────────────────────────
+
+    async def _refresh_summary(self, thread_id: uuid.UUID) -> None:
+        """Generate a plain-text summary of the thread and persist it. Fire-and-forget."""
+        try:
+            async with self._session_factory() as session:
+                interactions = await InteractionRepository(session).query_all_by_thread(thread_id)
+
+            if not interactions:
+                return
+
+            # Build a compact conversation transcript for Claude
+            lines = []
+            for i in interactions:
+                if i.role == "user" and i.message:
+                    lines.append(f"User: {i.message}")
+                elif i.role == "assistant":
+                    result = i.result or {}
+                    ui = result.get("ui", result)
+                    summary = ui.get("summary") if isinstance(ui, dict) else None
+                    if summary:
+                        lines.append(f"Assistant: {summary}")
+
+            if not lines:
+                return
+
+            transcript = "\n".join(lines[-20:])  # last 20 turns max
+
+            response = await self._anthropic.messages.create(
+                model=_SUMMARY_MODEL,
+                max_tokens=256,
+                system=_SUMMARY_SYSTEM,
+                messages=[{"role": "user", "content": transcript}],
+            )
+            summary_text = next(
+                (b.text for b in response.content if hasattr(b, "text")), ""
+            ).strip()
+
+            if summary_text:
+                async with self._session_factory() as session:
+                    async with session.begin():
+                        await ThreadRepository(session).update_summary(thread_id, summary_text)
+                log.info("rag.summary_updated", thread_id=str(thread_id))
+
+        except Exception as exc:
+            log.warning("rag.summary_failed", thread_id=str(thread_id), error=str(exc))
 
     async def _get_embedding(self, text: str) -> list[float]:
         # SentenceTransformer is synchronous — run in thread pool so it

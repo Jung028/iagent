@@ -31,6 +31,14 @@ class ChatRequest(BaseModel):
     # In Java Bean Validation this would be: @NotBlank @Size(min=1, max=2000) String message
     message: str = Field(min_length=1, max_length=2000)
 
+    # Set to true when the user clicks the Confirm button on a ConfirmationCard.
+    # This triggers transferInit and returns a PinInputCard.
+    confirmed: bool = False
+
+    # The user's PIN, submitted from a PinInputCard.
+    # Triggers transferConfirm on the backend.
+    pin: str | None = None
+
 
 class ChatResponse(BaseModel):
     """The JSON body iAgent Center sends back to the mobile app.

@@ -72,6 +72,49 @@ class BalanceCard(BaseModel):
     as_of: datetime
 
 
+class TextResponseCard(BaseModel):
+    """Natural language answer from the ReadAgent.
+    Used when the response is a conversational answer rather than a structured data card
+    e.g. "Yes, you sent RM 50.00 to Ali on 3 May 2026."
+    """
+    type: Literal["text_response"] = "text_response"
+    message: str
+
+class ResponseItem(BaseModel):
+    """One line in a section — either a key/value pair OR a plain bullet."""
+    label: str | None = None   # e.g. "Total amount"  — None for plain bullets
+    value: str | None = None   # e.g. "RM 1,011.00"   — None for plain bullets
+    text:  str | None = None   # plain bullet text     — None for key/value rows
+
+
+class ResponseSection(BaseModel):
+    title: str | None = None
+    items: list[ResponseItem] = []
+
+
+class StructuredResponseCard(BaseModel):
+    """Rich structured response from the ReadAgent.
+    Used when the answer has multiple sections, bullet points, or key-value data.
+    """
+    type:     Literal["structured_response"] = "structured_response"
+    summary:  str                              # one-line answer at the top
+    sections: list[ResponseSection] = []       # optional breakdown sections
+
+
+class ConfirmationCard(BaseModel):
+    """Shown to the user before a write operation is executed."""
+    type:    Literal["confirmation_card"] = "confirmation_card"
+    message: str   # e.g. "Confirm transfer of RM 50.00 to Ali?"
+    action:  str   # action_type string, e.g. "write_transfer"
+
+
+class PinInputCard(BaseModel):
+    """Shown after the user confirms — they must enter their PIN to call transferConfirm."""
+    type:    Literal["pin_input_card"] = "pin_input_card"
+    message: str   # e.g. "Enter your 6-digit PIN to authorise the transfer"
+    action:  str   # e.g. "write_transfer"
+
+
 class ErrorCard(BaseModel):
     # Same discriminator pattern as BalanceCard — mobile reads "type" = "error_card"
     # and knows to show an error UI instead of a balance UI.
@@ -100,6 +143,16 @@ class ErrorCard(BaseModel):
 # Pydantic instantiates a BalanceCard. When it sees "type": "error_card", it makes an ErrorCard.
 # In Java Jackson this is: @JsonTypeInfo(use=Id.NAME, property="type")
 AnyUICard = Annotated[
-    Union[BalanceCard, ErrorCard, TransactionDetailsCard, TransactionHistoryCard, TransactionAnalysisCard],
+    Union[
+        BalanceCard,
+        ConfirmationCard,
+        PinInputCard,
+        ErrorCard,
+        TextResponseCard,
+        StructuredResponseCard,
+        TransactionDetailsCard,
+        TransactionHistoryCard,
+        TransactionAnalysisCard,
+    ],
     Field(discriminator="type"),
 ]

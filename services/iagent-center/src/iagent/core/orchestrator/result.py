@@ -14,8 +14,8 @@ class OrchestratorResult:
     intent: str
     ui: Any  # AnyUICard — typed as Any to avoid circular imports
     requires_action: bool = False
-    requires_followup: bool = False  # TODO: set True when orchestrator should re-invoke for multi-step
-    followup_context: dict[str, Any] = field(default_factory=dict)  # TODO: carry state for next step
+    requires_followup: bool = False
+    followup_context: dict[str, Any] = field(default_factory=dict)
 
     def to_chat_response(self) -> ChatResponse:
         return ChatResponse(

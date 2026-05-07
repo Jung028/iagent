@@ -29,3 +29,18 @@ class SessionStore:
     async def clear(self, session_id: str) -> None:
         """Delete the session history (e.g. on explicit user logout)."""
         await self._redis.delete(f"session:{session_id}")
+
+    async def set_state(self, session_id: str, key: str, value: dict) -> None:
+        """Store an arbitrary key/value blob for this session (e.g. a pending plan)."""
+        redis_key = f"session:{session_id}:state:{key}"
+        await self._redis.set(redis_key, json.dumps(value, default=str), ex=self.HISTORY_TTL_SECONDS)
+
+    async def get_state(self, session_id: str, key: str) -> dict | None:
+        """Retrieve a stored blob, or None if absent."""
+        redis_key = f"session:{session_id}:state:{key}"
+        raw = await self._redis.get(redis_key)
+        return json.loads(raw) if raw else None
+
+    async def del_state(self, session_id: str, key: str) -> None:
+        """Delete a stored blob."""
+        await self._redis.delete(f"session:{session_id}:state:{key}")

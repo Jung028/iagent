@@ -52,6 +52,8 @@ class ContextBuilder:
         merged_entities.update(intent_result.entities or {})
 
 
+        thread_summary = memory_context.get("thread_summary") if memory_context else None
+
         return AgentContext(
             user_id=request.user_id,
             request_id=request_id,
@@ -64,4 +66,5 @@ class ContextBuilder:
             history=history,
             user_profile=user_profile,
             platform_user_id=request.phone_no or "",
+            thread_summary=thread_summary,
         )

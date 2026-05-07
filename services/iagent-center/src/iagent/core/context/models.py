@@ -22,6 +22,7 @@ class AgentContext:
     platform: str = "mobile"
     platform_user_id: str = ""
     media_attachments: list[str] = field(default_factory=list)
+    thread_summary: str | None = None  # LLM-generated summary of what happened in this thread
 
     def to_service_ctx(self) -> dict[str, str]:
         """Return the context forwarded as HTTP headers to Java services."""

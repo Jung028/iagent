@@ -96,6 +96,16 @@ class ThreadRepository:
         )
         return result.scalar_one_or_none()
 
+    async def query_by_user_id(self, user_id: int, limit: int = 50) -> list[Thread]:
+        """All threads for a user, most recently modified first."""
+        result = await self._session.execute(
+            select(Thread)
+            .where(Thread.user_id == user_id)
+            .order_by(Thread.updated_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
     async def create_new_thread(self, user_id: int) -> Thread:
         now = datetime.now(UTC)
         thread = Thread(
@@ -115,6 +125,14 @@ class ThreadRepository:
             .values(updated_at=datetime.now(UTC))
         )
 
+    async def update_summary(self, thread_id: uuid.UUID, summary: str) -> None:
+        """Persist a generated summary string for this thread."""
+        await self._session.execute(
+            update(Thread)
+            .where(Thread.thread_id == thread_id)
+            .values(summary=summary)
+        )
+
 
 class InteractionRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -128,6 +146,15 @@ class InteractionRepository:
             .where(Interaction.thread_id == thread_id)
             .order_by(Interaction.created_at.desc())
             .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def query_all_by_thread(self, thread_id: uuid.UUID) -> list[Interaction]:
+        """Full ordered history for a thread — oldest first, newest at bottom."""
+        result = await self._session.execute(
+            select(Interaction)
+            .where(Interaction.thread_id == thread_id)
+            .order_by(Interaction.created_at.asc())
         )
         return list(result.scalars().all())
 

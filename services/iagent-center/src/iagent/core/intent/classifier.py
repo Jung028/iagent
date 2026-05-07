@@ -38,7 +38,7 @@ class IntentClassifier:
             result = await self._call_llm(message)
         except Exception as exc:
             log.warning("intent_classification_failed", error=str(exc))
-            result = IntentResult(intent=Intent.UNKNOWN, confidence=0.0, entities={})
+            result = IntentResult(intent=Intent.READ, confidence=0.0, entities={})
 
         # 3. cache result
         await set_cached(self._redis, user_id, message, result)
@@ -66,7 +66,7 @@ class IntentClassifier:
 
         # Find the tool_use block in the response
         for block in response.content:
-            if block.type == "tool_use" and block.name == "extract_financial_intent":
+            if block.type == "tool_use" and block.name == "extract_intent":
                 return self._build_result(block.input)
 
         # Should never reach here with tool_choice="any", but safe fallback
@@ -79,7 +79,7 @@ class IntentClassifier:
         normalized = str(raw_intent).lower().strip()
 
         # Safe enum lookup — falls back to UNKNOWN if LLM returns unexpected value
-        intent = self._intent_map.get(normalized, Intent.UNKNOWN)
+        intent = self._intent_map.get(normalized, Intent.READ)
 
         try:
             confidence = float(args.get("confidence", 0.0))
@@ -93,4 +93,4 @@ class IntentClassifier:
         )
 
     def _fallback(self) -> IntentResult:
-        return IntentResult(intent=Intent.UNKNOWN, confidence=0.0, entities={})
+        return IntentResult(intent=Intent.READ, confidence=0.0, entities={})

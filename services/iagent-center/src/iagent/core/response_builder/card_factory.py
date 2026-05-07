@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any
 
-from iagent.api.schemas.ui_cards import AccountBalance, AnalysisSummary, BalanceCard, ErrorCard, TransactionAnalysisCard, TransactionDetails, TransactionDetailsCard, TransactionHistoryCard
+from iagent.api.schemas.ui_cards import AccountBalance, AnalysisSummary, BalanceCard, ErrorCard, TextResponseCard, TransactionAnalysisCard, TransactionDetails, TransactionDetailsCard, TransactionHistoryCard
 
 
 def make_balance_card(accounts_data: list[dict[str, Any]]) -> BalanceCard:

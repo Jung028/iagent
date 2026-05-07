@@ -65,6 +65,65 @@ class IBusinessClient(BaseServiceClient):
             "completed_at": result.get("gmtComplete"),
         }
     
+    async def transfer_init(
+        self,
+        payer_account_id: str,
+        payee_account_id: str,
+        amount: float,
+        currency: str,
+        unique_request_id: str,
+        **ctx: Any,
+    ) -> str:
+        """Call transferInit — returns the transferToken needed for transferConfirm."""
+        response = await self._request(
+            "POST",
+            "/business/basic/transferInit.json",
+            json={
+                "payerAccountNo": payer_account_id,
+                "payeeAccountNo": payee_account_id,
+                "amount": {"amount": amount, "currency": currency},
+                "uniqueRequestId": unique_request_id,
+            },
+            **ctx,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not payload.get("success"):
+            raise ValueError(f"transferInit failed: {payload.get('resultMessage', payload)}")
+        return str(payload.get("result", {}).get("transferToken", ""))
+
+    async def transfer_confirm(
+        self,
+        account_id: str,
+        password: str,
+        transfer_token: str,
+        transfer_type: str = "TRANSFER",
+        **ctx: Any,
+    ) -> dict[str, Any]:
+        """Call transferConfirm with the user's PIN — finalises the transfer."""
+        response = await self._request(
+            "POST",
+            "/business/basic/transferConfirm.json",
+            json={
+                "accountId":     account_id,
+                "password":      password,
+                "transferType":  transfer_type,
+                "transferToken": transfer_token,
+            },
+            **ctx,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not payload.get("success"):
+            raise ValueError(f"transferConfirm failed: {payload.get('resultMessage', payload)}")
+        result = payload.get("result", {})
+        return {
+            "status":   "success",
+            "txid":     result.get("txnId", ""),
+            "amount":   result.get("amount"),
+            "currency": result.get("currency", "MYR"),
+        }
+
     async def query_transaction_history(self, account_id: str, params: dict, **ctx:Any) -> list[dict[str, Any]]: 
 
         response = await self._request(

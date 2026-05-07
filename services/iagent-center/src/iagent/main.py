@@ -16,8 +16,10 @@ import anthropic
 
 # "import X as Y" is an alias. We import the redis async library but call it "aioredis"
 # so it's clear we're using the async version. In Java you'd just rename the variable.
-from iagent.core.orchestrator.handlers.transaction_analyze import TransactionAnalyzeInquiryHandler
-from iagent.core.orchestrator.handlers.transaction_search import TransctionSearchInquiryHandler
+from iagent.core.orchestrator.agents.planning_agent import PlanningAgent
+from iagent.core.orchestrator.agents.read_agent import ReadAgent
+from iagent.core.orchestrator.agents.write_agent import WriteAgent
+from iagent.core.orchestrator.agents.voice_agent import VoiceAgent
 from iagent.core.validator.intent_validator import IntentValidator
 from iagent.services.rag.database import create_engine_and_factory, create_tables
 from iagent.services.rag.rag_service import RAGService
@@ -30,7 +32,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # "iagent.api.middleware.auth" = src/iagent/api/middleware/auth.py
 from iagent.api.middleware.auth import AuthMiddleware
 from iagent.api.middleware.request_id import RequestIDMiddleware
-from iagent.api.routes import chat, health
+from iagent.api.routes import chat, health, threads
 from iagent.config import settings
 from iagent.core.intent.classifier import IntentClassifier
 from iagent.integrations.iaccount import IAccountClient
@@ -40,12 +42,6 @@ from iagent.observability.logging import configure_logging
 from iagent.observability.metrics import configure_metrics
 from iagent.observability.tracing import configure_tracing
 from iagent.core.orchestrator import Orchestrator
-from iagent.core.orchestrator.router import IntentRouter
-from iagent.core.orchestrator.handlers.transaction_details import TransactionDetailsInquiryHandler
-from iagent.core.orchestrator.handlers.balance_inquiry import BalanceInquiryHandler
-from iagent.core.orchestrator.handlers.recurring_payment import RecurringPaymentHandler
-from iagent.core.orchestrator.handlers.expense_tracking import ExpenseTrackingHandler
-from iagent.core.orchestrator.handlers.photo_claim import PhotoClaimHandler
 from iagent.core.models.intent import Intent
 from iagent.core.context.session_store import SessionStore
 from iagent.core.context.profile_loader import ProfileLoader
@@ -108,21 +104,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.session_store = SessionStore(redis)
     app.state.profile_loader = ProfileLoader(redis, profile_account_client)
 
-    # Register intent handlers and create the orchestrator.
-    intent_router = IntentRouter()
+    # Wire up the four agents for the three-phase orchestration flow:
+    #   Phase 1 — PlanningAgent  : decomposes user message into ordered action steps
+    #   Phase 2 — ReadAgent      : fetches data from the ledger (researcher)
+    #             WriteAgent     : executes mutations after user confirmation (executor)
+    #   Phase 3 — VoiceAgent     : synthesizes all results into a friendly reply
+    planning_agent = PlanningAgent(anthropic_client)
+    read_agent     = ReadAgent()
+    write_agent    = WriteAgent()
+    voice_agent    = VoiceAgent(anthropic_client)
 
-    intent_router.register(Intent.BALANCE_INQUIRY, BalanceInquiryHandler())
-    intent_router.register(Intent.TRANSACTION_DETAILS, TransactionDetailsInquiryHandler())
-    intent_router.register(Intent.TRANSACTION_ANALYZE, TransactionAnalyzeInquiryHandler())
-    intent_router.register(Intent.TRANSACTION_SEARCH, TransctionSearchInquiryHandler())
-    intent_router.register(Intent.RECURRING_PAYMENT, RecurringPaymentHandler())
-    intent_router.register(Intent.EXPENSE_TRACKING, ExpenseTrackingHandler())
-    intent_router.register(Intent.PHOTO_CLAIM, PhotoClaimHandler())
     app.state.orchestrator = Orchestrator(
-        intent_router,
+        planning_agent=planning_agent,
+        read_agent=read_agent,
+        write_agent=write_agent,
+        voice_agent=voice_agent,
         account_client=app.state.account_client,
         business_client=app.state.business_client,
         user_client=app.state.user_client,
+        session_store=app.state.session_store,
     )
 
     # Wire up WhatsApp platform adapter.
@@ -157,6 +157,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             session_factory=rag_session_factory,
             redis=redis,
             user_client=app.state.user_client,
+            anthropic_client=anthropic_client,
         )
 
     # "yield" is the dividing line between startup and shutdown.
@@ -207,4 +208,5 @@ app.add_middleware(AuthMiddleware)
 # In Java Spring this is like @RestController classes being picked up by component scan.
 app.include_router(health.router)
 app.include_router(chat.router)
+app.include_router(threads.router)
 app.include_router(whatsapp_webhook.router)

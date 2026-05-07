@@ -15,17 +15,11 @@ from typing import Any
 
 
 class Intent(StrEnum):
-    # Each line is: MEMBER_NAME = "string_value"
-    # The string value is what gets stored in JSON, Redis, logs, etc.
-    BALANCE_INQUIRY = "balance_inquiry"
-    RECURRING_PAYMENT = "recurring_payment"   # "pay rent RM1500 every 1st of the month"
-    EXPENSE_TRACKING = "expense_tracking"     # "how much did I spend on food last month"
-    PHOTO_CLAIM = "photo_claim"               # user sends a receipt image
-    UNKNOWN = "unknown"
-    TRANSACTION_SEARCH = "transaction_search"
-    TRANSACTION_DETAILS = "transaction_details"
-    TRANSACTION_ANALYZE = "transaction_analyze"
+    # READ  — anything that queries data: balance, history, search, analysis, greetings, unknown
+    READ     = "read"
+    # WRITE — money movement, always requires confirmation
     TRANSFER = "transfer"
+    TOP_UP   = "top_up"
 
 
 # "@dataclass" is a decorator applied to the class below it.
