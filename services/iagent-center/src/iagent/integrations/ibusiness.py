@@ -72,6 +72,8 @@ class IBusinessClient(BaseServiceClient):
         amount: float,
         currency: str,
         unique_request_id: str,
+        transfer_type: str = "AUTH_TRANSFER",
+        qr_token: str = "",
         **ctx: Any,
     ) -> str:
         """Call transferInit — returns the transferToken needed for transferConfirm."""
@@ -79,10 +81,12 @@ class IBusinessClient(BaseServiceClient):
             "POST",
             "/business/basic/transferInit.json",
             json={
-                "payerAccountNo": payer_account_id,
-                "payeeAccountNo": payee_account_id,
-                "amount": {"amount": amount, "currency": currency},
+                "payerAccountNo":  payer_account_id,
+                "payeeAccountNo":  payee_account_id,
+                "amount":          {"amount": amount, "currency": currency},
                 "uniqueRequestId": unique_request_id,
+                "transferType":    transfer_type,
+                "qrToken":         qr_token,
             },
             **ctx,
         )

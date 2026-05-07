@@ -103,6 +103,13 @@ class Orchestrator:
                 continue
 
             if step.is_write:
+                pre = await self._write.pre_check(step, ctx, **clients)
+                if pre["status"] != "ok":
+                    return OrchestratorResult(
+                        intent=ctx.intent,
+                        ui={"type": "text_response", "message": pre["message"]},
+                        requires_action=False,
+                    ).to_chat_response()
                 # Gate: store plan state and ask for user confirmation
                 await self._save_pending(ctx, plan, results, plan.steps.index(step))
                 return self._confirmation_response(ctx, step).to_chat_response()

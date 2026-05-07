@@ -50,8 +50,13 @@ class IntentValidator:
 
     @staticmethod
     def _build_question(intent: str, missing: list) -> str:
-        if intent == Intent.TRANSFER and "amount" in missing:
-            return "How much would you like to transfer?"
+        if intent == Intent.TRANSFER:
+            if "payeeName" in missing and "amount" in missing:
+                return "Who would you like to transfer to, and how much?"
+            if "payeeName" in missing:
+                return "Who would you like to transfer to?"
+            if "amount" in missing:
+                return "How much would you like to transfer?"
         if intent == Intent.TOP_UP and "amount" in missing:
             return "How much would you like to top up?"
         return "I need a bit more information to proceed."

@@ -15,6 +15,72 @@ class WriteAgent:
       2. execute_transfer_confirm → calls transferConfirm with user PIN, returns success result
     """
 
+    # ── Pre-execution check ───────────────────────────────────────────────────
+
+    async def pre_check(
+        self,
+        step: PlanStep,
+        ctx: AgentContext,
+        **clients,
+    ) -> dict:
+        """Validate params and enrich step.params before storing pending state.
+
+        Returns {"status": "ok"} when ready to proceed, or a dict with
+        "status" and "message" describing what is still missing.
+        """
+        if step.action_type == ActionType.WRITE_TRANSFER:
+            return await self._resolve_transfer_payee(step, ctx, **clients)
+        return {"status": "ok"}
+
+    async def _resolve_transfer_payee(
+        self, step: PlanStep, ctx: AgentContext, **clients
+    ) -> dict:
+        payee_name = step.params.get("payeeName") or ctx.entities.get("payeeName")
+        amount     = step.params.get("amount") or ctx.entities.get("amount")
+
+        if not payee_name:
+            return {"status": "need_payee", "message": "Who would you like to transfer to?"}
+
+        user_client = clients.get("user_client")
+        service_ctx = ctx.to_service_ctx()
+
+        try:
+            user_info = await user_client.query_user_info(
+                ctx.user_id, ctx.platform_user_id, **service_ctx
+            )
+            contacts: list = (
+                user_info.get("contactConfig", {}).get("userContactList") or []
+            )
+        except Exception as exc:
+            log.warning("contact_lookup_failed", error=str(exc))
+            contacts = []
+
+        matched = next(
+            (c for c in contacts if c.get("displayName", "").lower() == payee_name.lower()),
+            None,
+        )
+
+        if matched is None:
+            return {
+                "status": "contact_not_found",
+                "message": (
+                    f"'{payee_name}' is not in your contacts. "
+                    "Please add their phone number first to perform a transfer."
+                ),
+            }
+
+        step.params["payeeUserId"] = matched["userId"]
+        step.params["payeeName"]   = matched.get("displayName", payee_name)
+
+        if not amount:
+            return {
+                "status": "need_amount",
+                "message": f"How much would you like to transfer to {step.params['payeeName']}?",
+            }
+
+        step.params["amount"] = amount
+        return {"status": "ok"}
+
     # ── Public entry points ───────────────────────────────────────────────────
 
     async def execute_step(
@@ -64,19 +130,21 @@ class WriteAgent:
             business_client = clients["business_client"]
             service_ctx     = ctx.to_service_ctx()
 
-            # Resolve payer account ID
-            payer_account = await account_client.get_account_by_user_id(ctx.user_id, **service_ctx)
+            payer_account    = await account_client.get_account_by_user_id(ctx.user_id, **service_ctx)
             payer_account_id = payer_account["accountId"]
 
-            # Resolve payee account ID
-            # Use explicit account number if provided; otherwise contact lookup is required
-            payee_account_id = step.params.get("payeeAccountNo") or ctx.entities.get("payeeAccountNo")
-            if not payee_account_id:
-                # TODO: resolve payee name → userId → accountId via IUserClient contacts
-                raise ValueError(
-                    f"Cannot resolve account for '{payee}'. "
-                    "Ask the user to provide an account number."
-                )
+            # Prefer resolved userId from pre_check; fall back to explicit account number
+            payee_user_id = step.params.get("payeeUserId")
+            if payee_user_id:
+                payee_account    = await account_client.get_account_by_user_id(payee_user_id, **service_ctx)
+                payee_account_id = payee_account["accountId"]
+            else:
+                payee_account_id = step.params.get("payeeAccountNo") or ctx.entities.get("payeeAccountNo")
+                if not payee_account_id:
+                    raise ValueError(
+                        f"Cannot resolve account for '{payee}'. "
+                        "Ask the user to provide an account number."
+                    )
 
             transfer_token = await business_client.transfer_init(
                 payer_account_id=payer_account_id,
