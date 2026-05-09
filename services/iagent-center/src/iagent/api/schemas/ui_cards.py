@@ -109,10 +109,29 @@ class ConfirmationCard(BaseModel):
 
 
 class PinInputCard(BaseModel):
-    """Shown after the user confirms — they must enter their PIN to call transferConfirm."""
-    type:    Literal["pin_input_card"] = "pin_input_card"
-    message: str   # e.g. "Enter your 6-digit PIN to authorise the transfer"
-    action:  str   # e.g. "write_transfer"
+    """Shown after the user confirms — frontend calls transferConfirm directly with these fields."""
+    type:           Literal["pin_input_card"] = "pin_input_card"
+    message:        str   # e.g. "Enter your 6-digit PIN to authorise the transfer"
+    action:         str   # e.g. "write_transfer"
+    transfer_token: str = ""   # opaque token from transferInit — passed straight to transferConfirm
+    account_id:     str = ""   # payer accountId — passed straight to transferConfirm
+
+
+class BookkeepingEntry(BaseModel):
+    vendor:      str | None = None
+    date:        str | None = None   # YYYY-MM-DD
+    amount:      float | None = None
+    currency:    str | None = None
+    category:    str | None = None
+    description: str | None = None
+
+
+class BookkeepingCard(BaseModel):
+    type:                  Literal["bookkeeping_card"] = "bookkeeping_card"
+    entry:                 BookkeepingEntry
+    missing_fields:        List[str] = []
+    clarifying_questions:  List[str] = []
+    message:               str
 
 
 class ErrorCard(BaseModel):
@@ -147,6 +166,7 @@ AnyUICard = Annotated[
         BalanceCard,
         ConfirmationCard,
         PinInputCard,
+        BookkeepingCard,
         ErrorCard,
         TextResponseCard,
         StructuredResponseCard,

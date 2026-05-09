@@ -35,10 +35,6 @@ class ChatRequest(BaseModel):
     # This triggers transferInit and returns a PinInputCard.
     confirmed: bool = False
 
-    # The user's PIN, submitted from a PinInputCard.
-    # Triggers transferConfirm on the backend.
-    pin: str | None = None
-
 
 class ChatResponse(BaseModel):
     """The JSON body iAgent Center sends back to the mobile app.

@@ -94,7 +94,11 @@ class IBusinessClient(BaseServiceClient):
         payload = response.json()
         if not payload.get("success"):
             raise ValueError(f"transferInit failed: {payload.get('resultMessage', payload)}")
-        return str(payload.get("result", {}).get("transferToken", ""))
+        result = payload.get("result", "")
+        # Backend may return the token directly as a string, or wrapped in {"transferToken": "..."}
+        if isinstance(result, str):
+            return result
+        return str(result.get("transferToken", ""))
 
     async def transfer_confirm(
         self,

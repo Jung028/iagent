@@ -205,9 +205,11 @@ class Orchestrator:
         return OrchestratorResult(
             intent=ctx.intent,
             ui={
-                "type":    "pin_input_card",
-                "message": write_data.get("message", "Enter your PIN to authorise this transaction."),
-                "action":  write_data.get("action", ""),
+                "type":           "pin_input_card",
+                "message":        write_data.get("message", "Enter your PIN to authorise this transaction."),
+                "action":         write_data.get("action", ""),
+                "transfer_token": write_data.get("transfer_token", ""),
+                "account_id":     write_data.get("payer_account_id", ""),
             },
             requires_action=True,
         )

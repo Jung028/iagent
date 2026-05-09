@@ -1,10 +1,14 @@
+import base64
+import json
+
 from iagent.core.context.service_context import ServiceContext
 from iagent.core.intent.intent_contract_requirements import INTENT_REQUIREMENTS
 from iagent.core.models.validation import ValidationStatus
 from iagent.core.response_builder.builder import build_error_response
 from iagent.core.validator.intent_validator import IntentValidator
+from iagent.api.schemas.ui_cards import BookkeepingCard, BookkeepingEntry, TextResponseCard, ErrorCard
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, File, Form, Request, UploadFile
 
 from iagent.api.schemas.chat import ChatRequest, ChatResponse
 from iagent.core.context.builder import ContextBuilder
@@ -119,8 +123,6 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
 
     if request.confirmed:
         ctx.entities["confirmed"] = True
-    if request.pin:
-        ctx.entities["pin"] = request.pin
 
     response = await http_request.app.state.orchestrator.run(ctx)
 
@@ -151,3 +153,126 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
         )
 
     return response
+
+
+_BOOKKEEPING_SYSTEM = (
+    "You are a bookkeeping assistant. Analyse the receipt or document and extract:\n"
+    "- vendor: merchant/business name\n"
+    "- date: transaction date in YYYY-MM-DD format\n"
+    "- amount: total amount as a decimal number\n"
+    "- currency: 3-letter currency code (default MYR if not visible)\n"
+    "- category: exactly one of [GROCERIES, FOOD_DINING, TRANSPORT, FUEL, SHOPPING, "
+    "ENTERTAINMENT, UTILITIES, RENT, HEALTHCARE, EDUCATION, TRANSFER, TOP_UP, OTHER]\n"
+    "- description: brief description, max 60 chars\n\n"
+    "Rules: only fill fields you are CERTAIN about. Set uncertain/missing fields to null "
+    "and list them in missing_fields with a clarifying question for each.\n\n"
+    "Respond ONLY with valid JSON (no markdown):\n"
+    '{"extracted":{"vendor":null,"date":null,"amount":null,"currency":null,'
+    '"category":null,"description":null},"missing_fields":[],"clarifying_questions":[]}'
+)
+
+_QUESTION_SYSTEM = (
+    "You are a helpful assistant. Answer the user's question about the attached document "
+    "or image concisely and accurately. If the answer is not visible in the document, say so."
+)
+
+
+def _build_file_content(file_bytes: bytes, media_type: str, prompt: str) -> list:
+    b64 = base64.standard_b64encode(file_bytes).decode()
+    if media_type.startswith("image/"):
+        return [
+            {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
+            {"type": "text", "text": prompt},
+        ]
+    if media_type == "application/pdf":
+        return [
+            {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b64}},
+            {"type": "text", "text": prompt},
+        ]
+    # Fallback: treat as plain text
+    try:
+        text = file_bytes.decode("utf-8", errors="replace")
+    except Exception:
+        text = "(binary file — cannot display)"
+    return [{"type": "text", "text": f"Document content:\n{text}\n\n{prompt}"}]
+
+
+@router.post("/upload", response_model=ChatResponse)
+async def chat_upload(
+    user_id: str = Form(...),
+    action: str = Form(...),          # "bookkeeping" | "question"
+    message: str = Form(default=""),  # user's question (for action=question)
+    session_id: str = Form(default=""),
+    file: UploadFile = File(...),
+    http_request: Request = None,
+) -> ChatResponse:
+    anthropic_client = http_request.app.state.anthropic_client
+    file_bytes  = await file.read()
+    media_type  = file.content_type or "application/octet-stream"
+
+    try:
+        if action == "bookkeeping":
+            content = _build_file_content(
+                file_bytes, media_type,
+                "Extract all bookkeeping fields from this receipt or document.",
+            )
+            resp = await anthropic_client.messages.create(
+                model="claude-haiku-4-5",
+                max_tokens=1024,
+                system=_BOOKKEEPING_SYSTEM,
+                messages=[{"role": "user", "content": content}],
+            )
+            raw = resp.content[0].text.strip()
+            # Strip markdown fences if present
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            data       = json.loads(raw)
+            extracted  = data.get("extracted", {})
+            missing    = data.get("missing_fields", [])
+            questions  = data.get("clarifying_questions", [])
+
+            if missing:
+                msg = (
+                    "I extracted some information but need a few clarifications before adding this entry:\n"
+                    + "\n".join(f"• {q}" for q in questions)
+                )
+            else:
+                msg = "I extracted the following bookkeeping entry. Please confirm to add it."
+
+            return ChatResponse(
+                intent="bookkeeping_entry",
+                ui=BookkeepingCard(
+                    entry=BookkeepingEntry(**{k: v for k, v in extracted.items() if v is not None}),
+                    missing_fields=missing,
+                    clarifying_questions=questions,
+                    message=msg,
+                ),
+            )
+
+        else:  # action == "question"
+            prompt  = message.strip() or "What is this document about?"
+            content = _build_file_content(file_bytes, media_type, prompt)
+            resp = await anthropic_client.messages.create(
+                model="claude-haiku-4-5",
+                max_tokens=1024,
+                system=_QUESTION_SYSTEM,
+                messages=[{"role": "user", "content": content}],
+            )
+            answer = resp.content[0].text.strip()
+            return ChatResponse(
+                intent="document_question",
+                ui=TextResponseCard(message=answer),
+            )
+
+    except Exception as exc:
+        log.error("chat_upload_error", error=str(exc))
+        return ChatResponse(
+            intent="error",
+            ui=ErrorCard(
+                code="upload_error",
+                message="Sorry, I couldn't process the file. Please try again.",
+                recoverable=True,
+            ),
+        )

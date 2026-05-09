@@ -81,6 +81,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Then attach it to "app.state" — this is FastAPI's way of storing shared objects
     # that all route handlers can access. In Java Spring this would be @Autowired injection.
     app.state.classifier = IntentClassifier(anthropic_client, redis)
+    app.state.anthropic_client = anthropic_client
 
     # Create the two Java backend service clients and store them on app.state too.
     # token_provider=None means M2M auth is not yet implemented (TODO for Sprint 3).
