@@ -1,67 +1,99 @@
-from google.genai import types
+from datetime import date
 
-SYSTEM_PROMPT = """\
-You are the intent classification engine for iAgent Center, the AI layer of an eWallet platform.
-Your only job is to call the extract_financial_intent function with structured data from the user's message.
+today = date.today().isoformat()
 
-Never respond with plain text. Always call the function.
+SYSTEM_PROMPT = f"""\
+You are the intent router for iAgent, an eWallet assistant.
+Your only job is to call extract_intent with structured data from the user's message.
+Never respond in plain text. Always call the function.
 
-Supported intents:
-- balance_inquiry: user wants to know their balance or account info
-- transaction_details_inquiry: user asks about a specific past transaction
-- recurring_payment: user wants to set up, view, or cancel a scheduled/recurring payment (e.g. rent, subscriptions)
-- expense_tracking: user wants to see, summarise, or export their spending history
-- photo_claim: user sends a receipt or invoice image and wants to log or claim it
-- unknown: message does not match any supported intent
+Today's date is {today}.
 
-Entity extraction rules:
-- For recurring_payment: extract recipient, amount, currency, frequency, day_of_month if mentioned
-- For expense_tracking: extract date_range, category, merchant if mentioned
-- For photo_claim: note if the user explicitly asks to submit/save/claim (action field)
+INTENT DEFINITIONS:
+- read     : anything that asks a question, requests information, or is conversational
+             (balance, transaction history, spending analysis, greetings, "what can you do", unknown)
+- transfer : user wants to send money to someone
+- top_up   : user wants to add money to their eWallet (top up, reload, add funds)
+
+When in doubt between read and write, always choose read.
+Greetings, questions, and anything not clearly money-movement → read.
+
+ENTITY EXTRACTION (only for transfer and top_up):
+
+transfer entities:
+  amount        : numeric amount to send (required for transfer)
+  payeeName     : recipient's display name, for contact lookup
+  payeeAccountNo: recipient's exact account number (only if user states it)
+  currency      : currency code, default MYR
+  transferType  : STANDARD or QR, default STANDARD
+
+top_up entities:
+  amount    : numeric amount to top up (required)
+  currency  : currency code, default MYR
+  cardType  : DEBIT or CREDIT — default DEBIT unless user says "credit card"
+  isSaveCard: true ONLY if user explicitly says "save my card" or "remember my card"
+
+For read intent, do not extract any entities — the assistant handles querying itself.
 """
 
-EXTRACT_INTENT_TOOL = types.Tool(
-    function_declarations=[
-        types.FunctionDeclaration(
-            name="extract_financial_intent",
-            description="Extract the user's financial intent and any relevant entities from their message.",
-            parameters={
+EXTRACT_INTENT_TOOL = {
+    "name": "extract_intent",
+    "description": "Classify the user's message as read, transfer, or top_up and extract structured entities.",
+    "input_schema": {
+        "type": "object",
+        "required": ["intent", "confidence"],
+        "properties": {
+
+            "intent": {
+                "type": "string",
+                "enum": ["read", "transfer", "top_up"],
+            },
+
+            "confidence": {
+                "type": "number",
+                "description": "Confidence score 0.0 to 1.0.",
+            },
+
+            "entities": {
                 "type": "object",
+                "description": "Structured values for transfer or top_up only. Leave empty for read.",
                 "properties": {
-                    "intent": {
-                        "type": "string",
-                        "enum": [
-                            "balance_inquiry",
-                            "transaction_details_inquiry",
-                            "recurring_payment",
-                            "expense_tracking",
-                            "photo_claim",
-                            "unknown",
-                        ],
-                    },
-                    "confidence": {
+
+                    # ── transfer ──────────────────────────────────────────────
+                    "amount": {
                         "type": "number",
-                        "description": "Confidence score between 0 and 1",
+                        "description": "Amount to transfer or top up.",
                     },
-                    "entities": {
-                        "type": "object",
-                        "description": "Extracted values relevant to the intent",
-                        "properties": {
-                            "account_id":    {"type": "string"},
-                            "transaction_id": {"type": "string"},
-                            "recipient":     {"type": "string"},
-                            "amount":        {"type": "number"},
-                            "currency":      {"type": "string"},
-                            "frequency":     {"type": "string"},   # "monthly" | "weekly"
-                            "day_of_month":  {"type": "number"},
-                            "date_range":    {"type": "string"},   # e.g. "last month"
-                            "category":      {"type": "string"},   # e.g. "food"
-                            "action":        {"type": "string"},   # "submit" | "save" | "claim"
-                        },
+                    "payeeName": {
+                        "type": "string",
+                        "description": "Recipient display name for contact lookup.",
+                    },
+                    "payeeAccountNo": {
+                        "type": "string",
+                        "description": "Recipient's exact account number.",
+                    },
+                    "currency": {
+                        "type": "string",
+                        "description": "Currency code e.g. MYR. Default MYR.",
+                    },
+                    "transferType": {
+                        "type": "string",
+                        "enum": ["STANDARD", "QR"],
+                        "description": "Default STANDARD.",
+                    },
+
+                    # ── top_up ────────────────────────────────────────────────
+                    "cardType": {
+                        "type": "string",
+                        "enum": ["DEBIT", "CREDIT"],
+                        "description": "Default DEBIT.",
+                    },
+                    "isSaveCard": {
+                        "type": "boolean",
+                        "description": "True only if user explicitly asks to save their card.",
                     },
                 },
-                "required": ["intent", "confidence"],
             },
-        )
-    ]
-)
+        },
+    },
+}

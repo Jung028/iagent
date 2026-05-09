@@ -1,6 +1,8 @@
 # In Python, imports work similarly to Java's import statements.
 # "from X import Y" means: go into module X and bring Y into this file's scope.
 # This is like Java's "import com.example.X;" but more selective.
+from pathlib import Path
+from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,7 +19,10 @@ class Settings(BaseSettings):
     # SettingsConfigDict() tells pydantic WHERE to read settings from:
     #   - env_file=".env"  → also read from a .env file on disk
     #   - extra="ignore"   → silently ignore env vars that aren't declared as fields below
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # Resolve .env relative to this file so it works regardless of which
+    # directory uvicorn / the test runner is launched from.
+    _env_file = Path(__file__).parent.parent.parent / ".env"
+    model_config = SettingsConfigDict(env_file=str(_env_file), extra="ignore")
 
     # --- Field declarations ---
     # In Python (with Pydantic), you declare fields as:
@@ -31,9 +36,9 @@ class Settings(BaseSettings):
     app_port: int = 8000           # int is Python's int (no Integer wrapper class needed)
     log_level: str = "info"
 
-    # Gemini API key — NO default value = REQUIRED.
-    # Get yours from https://aistudio.google.com/apikey
-    gemini_api_key: str
+    # Anthropic API key — NO default value = REQUIRED.
+    # Get yours from https://console.anthropic.com/settings/keys
+    anthropic_api_key: str
 
     # Redis connection string. Has a default so it's optional in .env.
     redis_url: str = "redis://localhost:6379/0"
@@ -48,6 +53,12 @@ class Settings(BaseSettings):
     # In local dev, we might use a dummy path or allow it to be optional.
     jwt_public_key_path: str = "public_key.pem"
     jwt_algorithm: str = "RS256"
+
+    # RAG memory service — both optional; server starts (without RAG) if either is missing.
+    # DATABASE_URL must use SQLAlchemy format: postgresql://user@host:port/dbname
+    # pgvector extension must be installed in the target database.
+    database_url: Optional[str] = None
+    openai_api_key: Optional[str] = None
 
     # WhatsApp Cloud API — all optional so the server starts without WhatsApp configured.
     # Get these from Meta Developer Console → WhatsApp → API Setup.

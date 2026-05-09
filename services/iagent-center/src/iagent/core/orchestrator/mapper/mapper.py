@@ -3,7 +3,7 @@
 ENTITY_TO_API_MAP = {
     "payee_account_id": "payeeAccountId",
     "counterparty_name": "payeeName",
-    "time_hint": "gmtCreate",
+    "time_range": "gmtCreate",
     "account_id": "accountId",
 }
 

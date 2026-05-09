@@ -107,6 +107,7 @@ class BaseServiceClient:
         user_id: str = "",      # Forwarded to Java services for their own audit logs
         workflow_id: str = "",  # Future use — for multi-step workflow tracing
         session_id: str = "",   # The user's session ID from the frontend
+        auth_token: str = "",   # The forwarded Authorization header from the frontend
         **kwargs: Any,      # "**kwargs" captures any additional keyword arguments
                             # (like "json=", "params=") and forwards them to httpx.
                             # In Java: you'd have overloaded methods or a request options object.
@@ -128,7 +129,13 @@ class BaseServiceClient:
             "X-Workflow-ID": workflow_id,
             "X-Session-ID": session_id,
         }
-        if self._token_provider is not None:
+
+        # Priority 1: Forwarded token from the frontend (User Context)
+        if auth_token:
+            # If it already has "Bearer " or other prefix, use as-is.
+            headers["Authorization"] = auth_token
+        # Priority 2: M2M token (System Context)
+        elif self._token_provider is not None:
             headers["Authorization"] = f"Bearer {await self._token_provider.get_token()}"
 
         # Retry loop: attempt the request up to _MAX_RETRIES times.

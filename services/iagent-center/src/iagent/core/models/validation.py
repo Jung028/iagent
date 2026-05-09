@@ -6,8 +6,9 @@ from typing import Any, List
 
 
 class ValidationStatus(StrEnum):
-    READY= "READY",
-    INSUFICCIENT_CONTEXT="INSUFICCIENT_CONTEXT"
+    READY = "READY"
+    INSUFFICIENT_CONTEXT = "INSUFFICIENT_CONTEXT"
+    UNKNOWN_INTENT = "UNKNOWN_INTENT"
 
 @dataclass
 class ValidationResult:

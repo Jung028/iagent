@@ -4,6 +4,25 @@ from iagent.integrations.iaccount import IAccountClient
 from iagent.integrations.ibusiness import IBusinessClient
 from iagent.integrations.iuser import IUserClient
 
+DEFINITION: dict[str, Any] = {
+    "name": "get_transaction_detail",
+    "description": (
+        "Get full details of ONE specific transaction by its ID. "
+        "Use when the user provides a transaction ID (UUID), or when they want "
+        "more detail on a specific transaction found via query_transactions."
+    ),
+    "input_schema": {
+        "type": "object",
+        "required": ["txn_id"],
+        "properties": {
+            "txn_id": {
+                "type": "string",
+                "description": "The transaction ID (UUID format)",
+            },
+        },
+    },
+}
+
 
 async def handle(
         user_id: str,

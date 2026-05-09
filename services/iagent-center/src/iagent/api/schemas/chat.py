@@ -22,11 +22,18 @@ class ChatRequest(BaseModel):
     # The user's session ID, passed from the frontend session.
     session_id: str | None = Field(default=None, alias="sessionId")
 
+    # Thread ID for RAG memory continuity across turns.
+    thread_id: str | None = Field(default=None, alias="threadId")
+
     # Field() lets us add constraints and metadata to a field.
     # "min_length=1" means the message cannot be empty (raises a 422 error if violated).
     # "max_length=2000" prevents extremely large inputs from being sent to the LLM.
     # In Java Bean Validation this would be: @NotBlank @Size(min=1, max=2000) String message
     message: str = Field(min_length=1, max_length=2000)
+
+    # Set to true when the user clicks the Confirm button on a ConfirmationCard.
+    # This triggers transferInit and returns a PinInputCard.
+    confirmed: bool = False
 
 
 class ChatResponse(BaseModel):

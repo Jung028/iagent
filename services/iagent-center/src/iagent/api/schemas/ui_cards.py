@@ -26,11 +26,10 @@ class AccountBalance(BaseModel):
 
 
 class TransactionDetails(BaseModel):
-    account_id: str
+    account_id: str | None = None
     txn_id: str
     amount: float
     currency: str
-    payee: str | None = None
     txn_type: str | None = None
     created_at: str | None = None
     completed_at: str | None = None
@@ -42,6 +41,19 @@ class TransactionDetailsCard(BaseModel):
 class TransactionHistoryCard(BaseModel):
     type: Literal["transaction_history_card"] = "transaction_history_card"
     transaction_history: List[TransactionDetails]
+
+class AnalysisSummary(BaseModel):
+    count: int | None = None
+    average: float | None = None
+    total: float | None = None
+    currency: str = "MYR"
+    survival_forecast: str | None = None
+    summary: str
+
+
+class TransactionAnalysisCard(BaseModel):
+    type: Literal["transaction_analysis_card"] = "transaction_analysis_card"
+    analysis: AnalysisSummary
 
 class BalanceCard(BaseModel):
     # "Literal["balance_card"]" means this field MUST always equal the string "balance_card".
@@ -58,6 +70,68 @@ class BalanceCard(BaseModel):
 
     # The timestamp when this balance data was fetched from the backend.
     as_of: datetime
+
+
+class TextResponseCard(BaseModel):
+    """Natural language answer from the ReadAgent.
+    Used when the response is a conversational answer rather than a structured data card
+    e.g. "Yes, you sent RM 50.00 to Ali on 3 May 2026."
+    """
+    type: Literal["text_response"] = "text_response"
+    message: str
+
+class ResponseItem(BaseModel):
+    """One line in a section — either a key/value pair OR a plain bullet."""
+    label: str | None = None   # e.g. "Total amount"  — None for plain bullets
+    value: str | None = None   # e.g. "RM 1,011.00"   — None for plain bullets
+    text:  str | None = None   # plain bullet text     — None for key/value rows
+
+
+class ResponseSection(BaseModel):
+    title: str | None = None
+    items: list[ResponseItem] = []
+
+
+class StructuredResponseCard(BaseModel):
+    """Rich structured response from the ReadAgent.
+    Used when the answer has multiple sections, bullet points, or key-value data.
+    """
+    type:     Literal["structured_response"] = "structured_response"
+    summary:  str                              # one-line answer at the top
+    sections: list[ResponseSection] = []       # optional breakdown sections
+
+
+class ConfirmationCard(BaseModel):
+    """Shown to the user before a write operation is executed."""
+    type:    Literal["confirmation_card"] = "confirmation_card"
+    message: str   # e.g. "Confirm transfer of RM 50.00 to Ali?"
+    action:  str   # action_type string, e.g. "write_transfer"
+
+
+class PinInputCard(BaseModel):
+    """Shown after the user confirms — frontend calls transferConfirm directly with these fields."""
+    type:           Literal["pin_input_card"] = "pin_input_card"
+    message:        str   # e.g. "Enter your 6-digit PIN to authorise the transfer"
+    action:         str   # e.g. "write_transfer"
+    transfer_token: str = ""   # opaque token from transferInit — passed straight to transferConfirm
+    account_id:     str = ""   # payer accountId — passed straight to transferConfirm
+
+
+class BookkeepingEntry(BaseModel):
+    vendor:      str | None = None
+    date:        str | None = None   # YYYY-MM-DD
+    amount:      float | None = None
+    currency:    str | None = None
+    category:    str | None = None
+    description: str | None = None
+
+
+class BookkeepingCard(BaseModel):
+    type:                  Literal["bookkeeping_card"] = "bookkeeping_card"
+    entry:                 BookkeepingEntry
+    missing_fields:        List[str] = []
+    clarifying_questions:  List[str] = []
+    message:               str
 
 
 class ErrorCard(BaseModel):
@@ -88,6 +162,17 @@ class ErrorCard(BaseModel):
 # Pydantic instantiates a BalanceCard. When it sees "type": "error_card", it makes an ErrorCard.
 # In Java Jackson this is: @JsonTypeInfo(use=Id.NAME, property="type")
 AnyUICard = Annotated[
-    Union[BalanceCard, ErrorCard, TransactionDetailsCard, TransactionHistoryCard],
+    Union[
+        BalanceCard,
+        ConfirmationCard,
+        PinInputCard,
+        BookkeepingCard,
+        ErrorCard,
+        TextResponseCard,
+        StructuredResponseCard,
+        TransactionDetailsCard,
+        TransactionHistoryCard,
+        TransactionAnalysisCard,
+    ],
     Field(discriminator="type"),
 ]

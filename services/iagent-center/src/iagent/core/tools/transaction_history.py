@@ -1,55 +1,152 @@
+from difflib import get_close_matches
 from typing import Any
 
 from iagent.integrations.iaccount import IAccountClient
 from iagent.integrations.ibusiness import IBusinessClient
 from iagent.integrations.iuser import IUserClient
-from difflib import get_close_matches
+
+DEFINITION: dict[str, Any] = {
+    "name": "query_transactions",
+    "description": (
+        "Fetch the user's transaction history with optional filters. "
+        "Use for: listing transactions, history, spending analysis, "
+        "yes/no questions ('have I paid X?'), "
+        "superlatives ('most expensive', 'latest', 'oldest'), "
+        "and cross-period comparisons (call twice with different date ranges)."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "gmtCreateStart": {
+                "type": "string",
+                "description": "Start of datetime range YYYY-MM-DDTHH:MM:SS. Always pair with gmtCreateEnd.",
+            },
+            "gmtCreateEnd": {
+                "type": "string",
+                "description": "End of datetime range YYYY-MM-DDTHH:MM:SS. Always pair with gmtCreateStart.",
+            },
+            "payerName": {
+                "type": "string",
+                "description": "Filter by who paid INTO my account (incoming). e.g. 'received from Ali'.",
+            },
+            "payeeName": {
+                "type": "string",
+                "description": "Filter by who I paid (outgoing). e.g. 'sent to Ali', 'paid Ali'.",
+            },
+            "payerAccountId": {"type": "string"},
+            "payeeAccountId": {"type": "string"},
+            "txnType": {
+                "type": "string",
+                "enum": ["TRANSFER", "REFUND", "DEPOSIT", "TOP_UP"],
+            },
+            "txnStatus": {
+                "type": "string",
+                "enum": ["PENDING", "FINISH", "FAILED"],
+            },
+            "amountMin": {"type": "number", "description": "Minimum amount filter."},
+            "amountMax": {"type": "number", "description": "Maximum amount filter."},
+            "category": {
+                "type": "string",
+                "enum": [
+                    "GROCERIES", "FOOD_DINING", "TRANSPORT", "FUEL", "SHOPPING",
+                    "ENTERTAINMENT", "UTILITIES", "RENT", "HEALTHCARE", "EDUCATION",
+                    "TRANSFER", "TOP_UP", "OTHER",
+                ],
+            },
+            "sortField": {
+                "type": "string",
+                "enum": ["gmtCreate", "amount"],
+                "description": "Field to sort by. Use 'amount' for most/least expensive. Default gmtCreate.",
+            },
+            "sortOrder": {
+                "type": "string",
+                "enum": ["ASC", "DESC"],
+                "description": "ASC = oldest/cheapest first. DESC = newest/most expensive first. Default DESC.",
+            },
+            "pageNo":   {"type": "integer"},
+            "pageSize": {"type": "integer", "description": "Use 1 for latest/oldest/most expensive queries."},
+        },
+    },
+}
+
+# Fields that BusinessTransactionHistoryRequest accepts — anything else is stripped
+_ALLOWED_PARAMS = {
+    "gmtCreateStart", "gmtCreateEnd",
+    "payerAccountId", "payeeAccountId", "payerName",
+    "txnType", "txnStatus", "amountMin", "amountMax",
+    "category", "sortField", "sortOrder", "pageNo", "pageSize",
+}
+
+
+def _normalize_dt(value: str) -> str:
+    """Normalize any datetime string to YYYY-MM-DDTHH:MM:SS."""
+    v = str(value).strip().strip('"').strip("'")
+    v = v.split("+")[0].strip()   # strip timezone offset e.g. +00:00
+    v = v.replace(" ", "T")       # space separator → T
+    if "T" not in v:
+        v = f"{v}T00:00:00"
+    return v[:19]                 # truncate microseconds
+
 
 async def handle(
-    user_id:str,
+    user_id: str,
     phone_no: str,
     account_client: IAccountClient,
     business_client: IBusinessClient,
     user_client: IUserClient,
     params: dict,
+    user_profile: dict | None = None,
     **ctx: Any,
 ) -> list[dict[str, Any]]:
-    
-    # we need to add a check here, to ensure that the user's request for the payeeName is someone within his contacts, 
-    # check within the contact list, it should be able to handle even if half of the name is gone for example
-    # send 20 to adam. or send 20 to ad
-    contact_config = await user_client.query_user_info(user_id, phone_no=phone_no, **ctx)
-    # extract contact config, check whether the payeeName exist within 
-    payeeName = params.get("payeeName")
-    contacts = contact_config.get("userContactList", [])
-    names = [c.get("displayName", "") for c in contacts]
-    matches = get_close_matches(payeeName, names, n=1, cutoff=0.5)
 
-    if matches:
-        matched_name = matches[0]
-        match = next(c for c in contacts if c["displayName"] == matched_name)
+    # Contact lookup — only when payeeName is provided (outgoing transfer filter)
+    payee_name = params.get("payeeName")
+    if payee_name and payee_name.strip():
+        user_info = user_profile or await user_client.query_user_info(
+            user_id, phone_no=phone_no, **ctx
+        ) or {}
+        contacts = (user_info.get("contactConfig") or {}).get("userContactList") or []
+        names = [c.get("displayName", "") for c in contacts if isinstance(c, dict)]
 
-    if match:
-        # get payerAccountId by userId 
-        payerAccount = await account_client.get_account_by_user_id(match["userId"], **ctx)
-        params["payerAccountId"] = payerAccount["accountId"]
+        if names:
+            matches = get_close_matches(payee_name, names, n=1, cutoff=0.5)
+            if matches:
+                match = next(
+                    (c for c in contacts if c["displayName"] == matches[0]), None
+                )
+                if match:
+                    payee_account = await account_client.get_account_by_user_id(
+                        match["userId"], **ctx
+                    )
+                    params["payeeAccountId"] = payee_account["accountId"]
 
-    # fetch the list of transaction history from the ibusiness, by passing in the account Id, so we query iaccount first, 
+    # Strip fields Java doesn't know about (payeeName, confidence, intent, etc.)
+    clean_params = {k: v for k, v in params.items() if k in _ALLOWED_PARAMS}
+
+    # Normalize datetime fields to ISO-8601 without microseconds
+    for field in ("gmtCreateStart", "gmtCreateEnd"):
+        if clean_params.get(field):
+            clean_params[field] = _normalize_dt(clean_params[field])
+
+    # Resolve account then fetch
     account = await account_client.get_account_by_user_id(user_id, **ctx)
     account_id = account["accountId"]
 
-    transaction_history_result = await business_client.query_transaction_history(account_id, params **ctx)
-    transactions = transaction_history_result
+    transactions = await business_client.query_transaction_history(
+        account_id, clean_params, **ctx
+    ) or []
 
     return [
         {
-            "accountId": account_id,
-            "txnId": t.get("txnId"),
-            "gmtCreate": t.get("gmtCreate"),
-            "amount": t.get("amount"),
-            "currency": t.get("currency"),
-            "status": t.get("status"),
-            "extInfo": t.get("extInfo"),
+            "txnId":           t.get("txnId"),
+            "gmtCreate":       t.get("gmtCreate"),
+            "amount":          t.get("amount"),
+            "payeeAccountId":  t.get("payeeAccountId"),
+            "transactionType": t.get("transactionType"),
+            "completedAt":     t.get("gmtCompleted"),
+            "currency":        t.get("currency"),
+            "status":          t.get("status"),
+            "extInfo":         t.get("extInfo"),
         }
         for t in transactions
     ]

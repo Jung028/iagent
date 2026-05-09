@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any
 
-from iagent.api.schemas.ui_cards import AccountBalance, BalanceCard, ErrorCard, TransactionDetails, TransactionDetailsCard, TransactionHistoryCard
+from iagent.api.schemas.ui_cards import AccountBalance, AnalysisSummary, BalanceCard, ErrorCard, TextResponseCard, TransactionAnalysisCard, TransactionDetails, TransactionDetailsCard, TransactionHistoryCard
 
 
 def make_balance_card(accounts_data: list[dict[str, Any]]) -> BalanceCard:
@@ -63,18 +63,71 @@ def make_transaction_history_card(transaction_history: list[dict[str, Any]]) -> 
     return TransactionHistoryCard(
         transaction_history=[
             TransactionDetails(
-                account_id=t.get("accountId"),
+                account_id=t.get("payeeAccountId"),
                 txn_id=t.get("txnId"),
+                txn_type=t.get("transactionType"),
                 created_at=t.get("gmtCreate"),
+                completed_at=t.get("completedAt"),
                 amount=t.get("amount", 0.0),
                 currency=t.get("currency", "MYR"),
-                txn_status=t.get("status"),
-                ext_info=t.get("extInfo"),
+            )
+            # txn_id: str
+            # amount: float
+            # currency: str
+            # payee: str | None = None
+            # txn_type: str | None = None
+            # created_at: str | None = None
+            # completed_at: str | None = None
+            for t in transaction_history
+        ]
+    )
+    
+
+def make_transaction_analysis_card(transaction_history: list[dict[str, Any]]) -> TransactionAnalysisCard:
+        # Extract amounts — skip any transactions where amount is missing
+    amounts = [t["amount"] for t in transaction_history if t.get("amount") is not None]
+
+    count = len(amounts)
+    total = sum(amounts)
+    average = total / count if count > 0 else 0.0
+
+    # Grab currency from the first transaction, fall back to MYR
+    currency = transaction_history[0].get("currency", "MYR") if transaction_history else "MYR"
+
+    # Plain summary for now — Claude will replace this string later
+    summary = (
+        f"You made {count} transaction(s) totalling {currency} {total:.2f}. "
+        f"Your average transaction was {currency} {average:.2f}."
+    )
+
+    return TransactionAnalysisCard(
+        type="transaction_analysis_card",
+        analysis=AnalysisSummary(
+            count=count,
+            total=round(total, 2),
+            average=round(average, 2),
+            currency=currency,
+            summary=summary,
+        )
+    )
+
+def make_transaction_search_card(transaction_history: list[dict[str, Any]]) -> TransactionHistoryCard: 
+    return TransactionHistoryCard(
+        transaction_history=[
+            TransactionDetails(
+                account_id=t.get("payeeAccountId"),
+                txn_id=t.get("txnId"),
+                txn_type=t.get("transactionType"),
+                created_at=t.get("gmtCreate"),
+                completed_at=t.get("completedAt"),
+                amount=t.get("amount", 0.0),
+                currency=t.get("currency", "MYR"),
             )
             for t in transaction_history
         ]
     )
     
+
 
 def make_error_card(code: str, message: str, recoverable: bool = True) -> ErrorCard:
     """Create an ErrorCard to display when something goes wrong.

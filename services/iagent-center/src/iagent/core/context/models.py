@@ -4,40 +4,33 @@ from typing import Any
 
 @dataclass
 class AgentContext:
-    # --- Identity ---
+    # --- Identity (Required) ---
     user_id: str
     request_id: str
     session_id: str
 
-    # --- LLM output ---
+    # --- LLM output (Required) ---
     raw_message: str
     intent: str
-    confidence: float          # NOTE: float, not str
+    confidence: float
+
+    # --- Fields with Defaults ---
+    auth_token: str | None = None
     entities: dict[str, Any] = field(default_factory=dict)
-
-    # --- Conversation history ---
     history: list[dict[str, Any]] = field(default_factory=list)
-
-    # --- User profile ---
     user_profile: dict[str, Any] | None = None
-
-    # --- Platform context (WhatsApp, mobile, Telegram, etc.) ---
-    platform: str = "mobile"                    # identifies the inbound channel
-    platform_user_id: str = ""                  # phone number, chat ID, etc.
-    media_attachments: list[str] = field(default_factory=list)  # pre-signed media URLs
+    platform: str = "mobile"
+    platform_user_id: str = ""
+    media_attachments: list[str] = field(default_factory=list)
+    thread_summary: str | None = None  # LLM-generated summary of what happened in this thread
 
     def to_service_ctx(self) -> dict[str, str]:
-        """Return the context forwarded as HTTP headers to Java services.
-
-        Maps exactly to the keyword args BaseServiceClient._request() accepts:
-        request_id and workflow_id only.
-
-        NOTE: user_id is NOT included here — each client method already receives
-        it as a positional argument (e.g. get_account_by_user_id(user_id, **ctx)).
-        Including it here would cause a 'multiple values for argument' TypeError.
-        """
-        return {
+        """Return the context forwarded as HTTP headers to Java services."""
+        ctx = {
             "request_id": self.request_id,
             "workflow_id": self.session_id,
             "session_id": self.session_id,
         }
+        if self.auth_token:
+            ctx["auth_token"] = self.auth_token
+        return ctx
