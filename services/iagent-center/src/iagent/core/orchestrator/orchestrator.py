@@ -6,7 +6,7 @@ from iagent.core.orchestrator.agents.plan import ActionType, ExecutionPlan, Plan
 from iagent.core.orchestrator.agents.planning_agent import PlanningAgent
 from iagent.core.orchestrator.agents.read_agent import ReadAgent
 from iagent.core.orchestrator.agents.write_agent import WriteAgent
-from iagent.core.orchestrator.agents.voice_agent import VoiceAgent
+from iagent.core.orchestrator.agents.synthesize_agent import SynthesizeAgent
 from iagent.core.orchestrator.result import OrchestratorResult
 
 log = structlog.get_logger(__name__)
@@ -26,7 +26,7 @@ class Orchestrator:
     Phase 1 — Planning  : PlanningAgent decomposes the user message into ordered steps.
     Phase 2 — Execution : ReadAgent fetches data; WriteAgent executes mutations
                           (each write step requires explicit user confirmation first).
-    Phase 3 — Synthesis : VoiceAgent turns all raw results into a friendly reply.
+    Phase 3 — Synthesis : SynthesizeAgent turns all raw results into a friendly reply.
     """
 
     def __init__(
@@ -34,7 +34,7 @@ class Orchestrator:
         planning_agent: PlanningAgent,
         read_agent: ReadAgent,
         write_agent: WriteAgent,
-        voice_agent: VoiceAgent,
+        synthesize_agent: SynthesizeAgent,
         account_client: object,
         business_client: object,
         user_client: object,
@@ -43,7 +43,7 @@ class Orchestrator:
         self._planning      = planning_agent
         self._read          = read_agent
         self._write         = write_agent
-        self._voice         = voice_agent
+        self._synthesize         = synthesize_agent
         self._account_client  = account_client
         self._business_client = business_client
         self._user_client     = user_client
@@ -115,7 +115,7 @@ class Orchestrator:
                 return self._confirmation_response(ctx, step).to_chat_response()
 
         # ── Phase 3: Synthesis ────────────────────────────────────────────────
-        result = await self._voice.synthesize(ctx, plan, results)
+        result = await self._synthesize.synthesize(ctx, plan, results)
         return result.to_chat_response()
 
     # ── Confirmation flow ─────────────────────────────────────────────────────
@@ -155,7 +155,7 @@ class Orchestrator:
         await self._clear_pending(ctx)
 
         # Phase 3: Synthesize final response
-        result = await self._voice.synthesize(ctx, plan, results)
+        result = await self._synthesize.synthesize(ctx, plan, results)
         return result.to_chat_response()
 
     async def _complete_with_pin(
@@ -174,12 +174,12 @@ class Orchestrator:
         if self._session_store and ctx.session_id:
             await self._session_store.del_state(ctx.session_id, _PENDING_PIN_KEY)
 
-        # Reconstruct the plan to pass to VoiceAgent for synthesis
+        # Reconstruct the plan to pass to SynthesizeAgent for synthesis
         plan = _deserialize_plan(pending_pin["plan"])
         results: list[dict] = pending_pin.get("results_so_far", [])
         results.append({"step": pending_pin.get("action"), "data": data})
 
-        result = await self._voice.synthesize(ctx, plan, results)
+        result = await self._synthesize.synthesize(ctx, plan, results)
         return result.to_chat_response()
 
     async def _save_pending_pin(

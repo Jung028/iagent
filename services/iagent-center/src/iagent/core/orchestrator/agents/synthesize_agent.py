@@ -54,7 +54,7 @@ SYNTHESIZE_TOOL = {
 }
 
 SYSTEM_TEMPLATE = """\
-You are the Voice Agent (Synthesis) for iAgent, an eWallet assistant for {name}.
+You are the SynthesizeAgent Agent (Synthesis) for iAgent, an eWallet assistant for {name}.
 Today is {today}.
 
 Your job: turn raw execution results into a single friendly, human-readable reply.
@@ -72,7 +72,7 @@ RULES:
 """
 
 
-class SynthesisAgent:
+class SynthesizeAgent:
     """Synthesis agent — turns raw execution results into a friendly chat response."""
 
     def __init__(self, client: anthropic.AsyncAnthropic) -> None:

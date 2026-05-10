@@ -113,7 +113,7 @@ class WriteAgent:
 
         if action == ActionType.WRITE_TRANSFER:
             return await self._transfer_confirm(pending, pin, ctx, **clients)
-
+        
         return {"error": f"PIN confirm not supported for action: {action}"}
 
     # ── Transfer ──────────────────────────────────────────────────────────────

@@ -19,7 +19,7 @@ import anthropic
 from iagent.core.orchestrator.agents.planning_agent import PlanningAgent
 from iagent.core.orchestrator.agents.read_agent import ReadAgent
 from iagent.core.orchestrator.agents.write_agent import WriteAgent
-from iagent.core.orchestrator.agents.voice_agent import VoiceAgent
+from iagent.core.orchestrator.agents.synthesize_agent import SynthesizeAgent
 from iagent.core.validator.intent_validator import IntentValidator
 from iagent.services.rag.database import create_engine_and_factory, create_tables
 from iagent.services.rag.rag_service import RAGService
@@ -109,17 +109,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     #   Phase 1 — PlanningAgent  : decomposes user message into ordered action steps
     #   Phase 2 — ReadAgent      : fetches data from the ledger (researcher)
     #             WriteAgent     : executes mutations after user confirmation (executor)
-    #   Phase 3 — VoiceAgent     : synthesizes all results into a friendly reply
+    #   Phase 3 — SynthesizeAgent     : synthesizes all results into a friendly reply
     planning_agent = PlanningAgent(anthropic_client)
     read_agent     = ReadAgent()
     write_agent    = WriteAgent()
-    voice_agent    = VoiceAgent(anthropic_client)
+    synthesize_agent    = SynthesizeAgent(anthropic_client)
 
     app.state.orchestrator = Orchestrator(
         planning_agent=planning_agent,
         read_agent=read_agent,
         write_agent=write_agent,
-        voice_agent=voice_agent,
+        synthesize_agent=synthesize_agent,
         account_client=app.state.account_client,
         business_client=app.state.business_client,
         user_client=app.state.user_client,
