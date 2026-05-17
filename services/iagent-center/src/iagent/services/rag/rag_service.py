@@ -74,7 +74,6 @@ class RAGService:
                 thread_repo = ThreadRepository(session)
                 interaction_repo = InteractionRepository(session)
 
-                # TODO: need to pass in phone no. 
                 results = await asyncio.gather(
                     self._user_client.query_user_info(user_id, phone_no=phone_no, **ctx_kwargs),
                     entity_repo.query_user_entity_by_user_id(int_user_id),

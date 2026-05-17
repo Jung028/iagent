@@ -32,7 +32,10 @@ from fastapi.middleware.cors import CORSMiddleware
 # "iagent.api.middleware.auth" = src/iagent/api/middleware/auth.py
 from iagent.api.middleware.auth import AuthMiddleware
 from iagent.api.middleware.request_id import RequestIDMiddleware
-from iagent.api.routes import chat, health, threads
+from iagent.api.routes import chat, health, threads, extract
+from iagent.services.document.ocr_service import OCRService
+from iagent.services.document.llm_extraction_service import LLMExtractionService
+from iagent.api.controllers.extract_controller import ExtractionController
 from iagent.config import settings
 from iagent.core.intent.classifier import IntentClassifier
 from iagent.integrations.iaccount import IAccountClient
@@ -137,6 +140,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.whatsapp_adapter = WhatsAppAdapter(whatsapp_client, whatsapp_verifier)
 
+    app.state.extraction_controller = ExtractionController(
+        ocr_service=OCRService(anthropic_client),
+        llm_service=LLMExtractionService(anthropic_client),
+    )
+
     platform_registry = PlatformRegistry()
     platform_registry.register(app.state.whatsapp_adapter)
     app.state.platform_registry = platform_registry
@@ -211,3 +219,4 @@ app.include_router(health.router)
 app.include_router(chat.router)
 app.include_router(threads.router)
 app.include_router(whatsapp_webhook.router)
+app.include_router(extract.router)
