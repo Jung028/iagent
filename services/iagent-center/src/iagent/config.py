@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     database_url: Optional[str] = None
     openai_api_key: Optional[str] = None
 
+    # CORS — comma-separated list of allowed origins.
+    cors_origins: str = "http://localhost:8089,http://localhost:5173,http://localhost:3000"
+
     # WhatsApp Cloud API — all optional so the server starts without WhatsApp configured.
     # Get these from Meta Developer Console → WhatsApp → API Setup.
     whatsapp_phone_number_id: str = ""     # e.g. "123456789012345"

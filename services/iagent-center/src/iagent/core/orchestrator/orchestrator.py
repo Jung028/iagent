@@ -138,6 +138,7 @@ class Orchestrator:
 
         # transferInit succeeded — save transferToken and return PIN card
         if data.get("status") == "awaiting_pin":
+            await self._clear_pending(ctx)
             await self._save_pending_pin(ctx, data, plan, results)
             return self._pin_input_response(ctx, data).to_chat_response()
 
@@ -170,9 +171,10 @@ class Orchestrator:
 
         data = await self._write.execute_confirm_pin(pending_pin, pin, ctx, **clients)
 
-        # Clear PIN state
+        # Clear PIN state and any residual pending plan
         if self._session_store and ctx.session_id:
             await self._session_store.del_state(ctx.session_id, _PENDING_PIN_KEY)
+        await self._clear_pending(ctx)
 
         # Reconstruct the plan to pass to SynthesizeAgent for synthesis
         plan = _deserialize_plan(pending_pin["plan"])

@@ -1,0 +1,51 @@
+services:
+  - type: web
+    name: iagent-center
+    runtime: docker
+    dockerfilePath: services/iagent-center/Dockerfile
+    dockerContext: services/iagent-center
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      # ── App ──────────────────────────────────────────────────────────────
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+
+      # ── CORS ─────────────────────────────────────────────────────────────
+      # Comma-separated list of allowed frontend origins.
+      # Replace with your actual frontend URL after deploying.
+      - key: CORS_ORIGINS
+        value: https://your-frontend.onrender.com
+
+      # ── Secrets (set manually in Render dashboard → Environment) ─────────
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+      # ── Redis (get URL from Upstash: https://console.upstash.com) ────────
+      - key: REDIS_URL
+        sync: false
+
+      # ── Java backend services ─────────────────────────────────────────────
+      # Point these at your deployed iAccount / iBusiness / iUser instances.
+      - key: IACCOUNT_BASE_URL
+        sync: false
+      - key: IBUSINESS_BASE_URL
+        sync: false
+      - key: IUSER_BASE_URL
+        sync: false
+
+      # ── PostgreSQL / RAG (optional) ───────────────────────────────────────
+      # Get a free Supabase URL from https://supabase.com (enable pgvector extension).
+      # Leave unset to run without RAG memory.
+      - key: DATABASE_URL
+        sync: false
+
+      # ── WhatsApp (optional) ───────────────────────────────────────────────
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false

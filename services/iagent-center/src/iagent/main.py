@@ -210,7 +210,7 @@ app = FastAPI(title="iAgent Center", version="0.1.0", lifespan=lifespan)
 # In Java Spring this is a Filter chain / OncePerRequestFilter.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8089", "http://localhost:5173", "http://localhost:3000"],
+    allow_origins=[o.strip() for o in settings.cors_origins.split(",")],
     allow_methods=["*"],
     allow_headers=["*"],
 )

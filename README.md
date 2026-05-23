@@ -3,9 +3,34 @@
 The AI orchestration service for the iAgent platform. Receives chat messages from any connected platform (WhatsApp, web), classifies intent, runs a three-phase agent pipeline, and returns structured responses to the frontend.
 
 ---
-## System Analysis 
 
-Full system design and analysis is attatched here : 
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| **Runtime** | Python 3.12 |
+| **Web framework** | FastAPI + Uvicorn |
+| **AI / LLM** | Anthropic Claude (claude-haiku-4-5 for OCR, extraction, reconciliation; Sonnet for intent classification & orchestration) |
+| **Async HTTP** | HTTPX |
+| **Caching / sessions** | Redis (via `redis[hiredis]`) |
+| **Database** | PostgreSQL + pgvector (optional, for RAG memory) |
+| **ORM / migrations** | SQLAlchemy (async) + Alembic |
+| **Data validation** | Pydantic v2 + pydantic-settings |
+| **Package manager** | uv |
+| **Containerisation** | Docker + Docker Compose |
+| **Observability** | structlog (JSON logs), OpenTelemetry, Prometheus |
+| **Authentication** | JWT (RS256) via python-jose |
+| **Messaging** | Google Pub/Sub (Gmail webhooks), Basiq CDR (bank webhooks) |
+| **WhatsApp** | Meta WhatsApp Cloud API |
+| **Testing** | pytest, pytest-asyncio, testcontainers |
+| **Linting / formatting** | Ruff |
+| **Type checking** | mypy |
+
+---
+
+## System Analysis
+
+Full system design and analysis is attached here:
 https://www.notion.so/AI-Chatbot-iagent-SA-33fd911b2cdb80da88f5fc3e332c51ba?source=copy_link
 
 
@@ -32,12 +57,24 @@ Client / Platform
 │  │  Phase 2 — ReadAgent  /  WriteAgent       │     │
 │  │            Executes each step via tools   │     │
 │  │                    │                      │     │
-│  │  Phase 3 — SynthesisAgent                     │     │
+│  │  Phase 3 — SynthesizeAgent                │     │
 │  │            Synthesises reply              │     │
 │  └────────────────────────────────────────────┘     │
 │       │                                             │
 │       ▼                                             │
 │  ResponseBuilder  (text + UI cards)                 │
+│                                                     │
+│  POST /api/v1/documents/extract                     │
+│       │                                             │
+│       ▼                                             │
+│  OCRService ──► LLMExtractionService                │
+│  (transcribe)   (structure fields)                  │
+│                                                     │
+│  POST /api/v1/reconciliation/suggest                │
+│       │                                             │
+│       ▼                                             │
+│  ReconciliationService                              │
+│  (match document → bank transaction)                │
 └─────────────────────────────────────────────────────┘
       │
       ▼
@@ -54,6 +91,72 @@ Client / Platform
 | `EXPENSE_TRACKING` | Categorise and track expenses |
 | `PHOTO_CLAIM` | Submit a photo-based claim |
 | `RECURRING_PAYMENT` | Manage recurring payments |
+
+---
+
+## Document extraction pipeline
+
+A two-stage pipeline that converts raw receipts and invoices (images or PDFs) into structured bookkeeping data.
+
+```
+Client
+  │  POST /api/v1/documents/extract
+  │  { file_url, mime_type, source_document_id }
+  ▼
+OCRService  (Claude claude-haiku-4-5)
+  │  Transcribes all visible text from image / PDF
+  ▼
+LLMExtractionService  (Claude claude-haiku-4-5)
+  │  Extracts structured fields from raw text
+  ▼
+ExtractionController
+  │  Determines status: success / partial / failed
+  ▼
+DocumentExtractResponse
+  { vendor, date, amount, currency, category, description,
+    missing_fields, clarifying_questions }
+```
+
+### Supported input formats
+
+| MIME type | Handling |
+|---|---|
+| `image/png`, `image/jpeg`, `image/gif`, `image/webp` | Claude vision OCR |
+| `application/pdf` | Claude document OCR |
+| `text/*` | Decoded directly, no LLM call |
+
+### Extraction fields
+
+| Field | Description |
+|---|---|
+| `vendor` | Merchant or business name |
+| `date` | Transaction date (`YYYY-MM-DD`) |
+| `amount` | Total amount as a decimal |
+| `currency` | 3-letter code (defaults to `MYR`) |
+| `category` | One of `GROCERIES`, `FOOD_DINING`, `TRANSPORT`, `FUEL`, `SHOPPING`, `ENTERTAINMENT`, `UTILITIES`, `RENT`, `HEALTHCARE`, `EDUCATION`, `TRANSFER`, `TOP_UP`, `OTHER` |
+| `description` | Brief description, max 60 chars |
+
+Fields the model is not confident about are returned in `missing_fields` alongside a `clarifying_questions` list the frontend can present to the user.
+
+---
+
+## Reconciliation pipeline
+
+An AI-powered matching service that, given an extracted document and a list of candidate bank transactions, identifies the best match and explains why.
+
+```
+Client
+  │  POST /api/v1/reconciliation/suggest
+  │  { extracted_document, candidate_bank_transactions[] }
+  ▼
+ReconciliationService  (Claude claude-haiku-4-5)
+  │  Considers: vendor name, amount, currency, date proximity, description
+  ▼
+ReconciliationSuggestion
+  { suggested_bank_transaction_id, confidence_score, reason }
+```
+
+The service only suggests — it does not approve or post journal entries. The caller decides what to do with the suggestion based on `confidence_score`.
 
 ---
 
@@ -129,6 +232,9 @@ PUBSUB_TOPIC=projects/PROJECT_ID/topics/gmail-push
 WHATSAPP_PHONE_NUMBER_ID=...
 WHATSAPP_ACCESS_TOKEN=...
 WHATSAPP_APP_SECRET=...
+
+# Optional — CORS (comma-separated, defaults to localhost dev origins)
+CORS_ORIGINS=https://your-frontend.example.com
 ```
 
 ### Run
@@ -148,6 +254,8 @@ API docs available at `http://localhost:8000/docs`.
 | `POST` | `/chat` | Send a message; returns text + optional UI cards |
 | `GET` | `/threads/{thread_id}` | Retrieve conversation thread |
 | `GET` | `/health` | Health check |
+| `POST` | `/api/v1/documents/extract` | OCR + LLM extraction from receipt/invoice |
+| `POST` | `/api/v1/reconciliation/suggest` | Match extracted document to a bank transaction |
 | `GET` | `/onboarding/gmail/start` | Begin Gmail OAuth flow |
 | `GET` | `/onboarding/gmail/callback` | OAuth callback (redirect target) |
 | `POST` | `/webhooks/gmail` | Google Pub/Sub push receiver |
@@ -161,47 +269,57 @@ API docs available at `http://localhost:8000/docs`.
 ```
 src/iagent/
 ├── api/
-│   ├── middleware/         # Auth (JWT), request ID injection
+│   ├── controllers/
+│   │   ├── extract_controller.py       # Orchestrates OCR → LLM extraction pipeline
+│   │   └── reconciliation_controller.py# Delegates to ReconciliationService
+│   ├── middleware/                     # Auth (JWT), request ID injection
 │   ├── routes/
-│   │   ├── chat.py         # POST /chat
-│   │   ├── threads.py      # Thread history
-│   │   ├── onboarding.py   # Gmail OAuth onboarding
-│   │   └── webhooks/       # WhatsApp, Gmail, Basiq receivers
-│   └── schemas/            # Pydantic request/response models
+│   │   ├── chat.py                     # POST /chat
+│   │   ├── extract.py                  # POST /api/v1/documents/extract
+│   │   ├── reconciliation.py           # POST /api/v1/reconciliation/suggest
+│   │   ├── threads.py                  # Thread history
+│   │   ├── onboarding.py               # Gmail OAuth onboarding
+│   │   └── webhooks/                   # WhatsApp, Gmail, Basiq receivers
+│   └── schemas/                        # Pydantic request/response models
 │
 ├── core/
-│   ├── intent/             # Intent classification (Anthropic API)
+│   ├── intent/                         # Intent classification (Anthropic API)
 │   ├── orchestrator/
-│   │   ├── agents/         # PlanningAgent, ReadAgent, WriteAgent, SynthesisAgent
-│   │   ├── handlers/       # One handler per intent type
-│   │   └── orchestrator.py # Three-phase pipeline coordinator
-│   ├── context/            # Session store (Redis), profile loader
-│   ├── tools/              # Tool definitions for agent function-calling
-│   └── response_builder/   # Text + UI card assembly
-│
-├── balance/                # Balance pipeline (TASK-001)
-│   ├── models.py           # SQLAlchemy ORM: PlatformConnection, Invoice, Transaction, JournalEntry
-│   ├── google_client.py    # Google OAuth + Gmail REST API client
-│   ├── gmail_service.py    # Pub/Sub push handling, invoice extraction
-│   ├── basiq_service.py    # Basiq webhook handling, transaction ingestion
-│   ├── connection_service.py # OAuth token management, platform connection lifecycle
-│   ├── matching_engine.py  # Invoice ↔ transaction reconciliation algorithm
-│   ├── journal_writer.py   # Double-entry journal entry writer
-│   └── database.py         # SQLAlchemy engine + table creation
-│
-├── integrations/
-│   ├── iaccount.py         # iAccount Java service client
-│   ├── ibusiness.py        # iBusiness Java service client
-│   ├── iuser.py            # iUser Java service client
-│   └── platforms/
-│       └── whatsapp/       # WhatsApp Cloud API adapter
+│   │   ├── agents/                     # PlanningAgent, ReadAgent, WriteAgent, SynthesizeAgent
+│   │   ├── handlers/                   # One handler per intent type
+│   │   └── orchestrator.py             # Three-phase pipeline coordinator
+│   ├── context/                        # Session store (Redis), profile loader
+│   ├── tools/                          # Tool definitions for agent function-calling
+│   └── response_builder/              # Text + UI card assembly
 │
 ├── services/
-│   └── rag/                # RAG memory service (pgvector + OpenAI)
+│   ├── document/
+│   │   ├── ocr_service.py              # Claude vision/document OCR
+│   │   ├── llm_extraction_service.py   # Structured field extraction from raw text
+│   │   ├── extraction_service.py       # Shared extraction utilities
+│   │   └── reconciliation_service.py   # AI-powered document ↔ transaction matching
+│   └── rag/                            # RAG memory service (pgvector + Anthropic)
 │
-├── observability/          # Structured logging, OpenTelemetry tracing, Prometheus metrics
-├── config.py               # Pydantic settings (reads from .env)
-└── main.py                 # FastAPI app, lifespan startup/shutdown wiring
+├── balance/                            # Balance pipeline (TASK-001)
+│   ├── models.py                       # SQLAlchemy ORM: PlatformConnection, Invoice, Transaction, JournalEntry
+│   ├── google_client.py                # Google OAuth + Gmail REST API client
+│   ├── gmail_service.py                # Pub/Sub push handling, invoice extraction
+│   ├── basiq_service.py                # Basiq webhook handling, transaction ingestion
+│   ├── connection_service.py           # OAuth token management, platform connection lifecycle
+│   ├── matching_engine.py              # Invoice ↔ transaction reconciliation algorithm
+│   ├── journal_writer.py               # Double-entry journal entry writer
+│   └── database.py                     # SQLAlchemy engine + table creation
+│
+├── integrations/
+│   ├── iaccount.py                     # iAccount Java service client
+│   ├── ibusiness.py                    # iBusiness Java service client
+│   ├── iuser.py                        # iUser Java service client
+│   └── platforms/
+│       └── whatsapp/                   # WhatsApp Cloud API adapter
+│
+├── observability/                      # Structured logging, OpenTelemetry tracing, Prometheus metrics
+├── config.py                           # Pydantic settings (reads from .env)
+└── main.py                             # FastAPI app, lifespan startup/shutdown wiring
 ```
 
 ---
