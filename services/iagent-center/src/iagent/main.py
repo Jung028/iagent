@@ -43,6 +43,7 @@ from iagent.core.intent.classifier import IntentClassifier
 from iagent.integrations.iaccount import IAccountClient
 from iagent.integrations.ibusiness import IBusinessClient
 from iagent.integrations.iuser import IUserClient
+from iagent.integrations.tracely import TracelyGraphClient
 from iagent.observability.logging import configure_logging
 from iagent.observability.metrics import configure_metrics
 from iagent.observability.tracing import configure_tracing
@@ -98,6 +99,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.user_client = IUserClient(
         settings.iuser_base_url, "iuser", token_provider=None
+    )
+    # Tracely system-graph client — backs the query_system_graph tool so the agent
+    # can answer architecture/dependency/impact questions by graph traversal.
+    app.state.graph_client = TracelyGraphClient(
+        settings.tracely_base_url, "tracely-graph", token_provider=None
     )
 
     # Wire up context services.

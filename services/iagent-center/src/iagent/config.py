@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     ibusiness_base_url: str
     iuser_base_url: str
 
+    # Tracely — the unified system graph the agent queries to answer
+    # architecture / dependency / impact questions via traversal.
+    tracely_base_url: str = "http://localhost:3000"
+
     # JWT Authentication settings (Asymmetric RSA)
     # jwt_public_key_path: Path to the .pem public key file.
     # In local dev, we might use a dummy path or allow it to be optional.

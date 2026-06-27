@@ -176,13 +176,35 @@ class Orchestrator:
             await self._session_store.del_state(ctx.session_id, _PENDING_PIN_KEY)
         await self._clear_pending(ctx)
 
-        # Reconstruct the plan to pass to SynthesizeAgent for synthesis
-        plan = _deserialize_plan(pending_pin["plan"])
-        results: list[dict] = pending_pin.get("results_so_far", [])
-        results.append({"step": pending_pin.get("action"), "data": data})
+        # Fast-path: return immediately without an LLM call so the chat bubble
+        # appears as soon as transferConfirm completes (ibusiness websocket already
+        # notifies the frontend; synthesis latency is wasted here).
+        if data.get("error"):
+            payee = pending_pin.get("payee", "the recipient")
+            msg = (
+                f"I wasn't able to complete the transfer to {payee}. "
+                "The transfer encountered an error during confirmation. "
+                "Please try again, and if the problem continues, please contact support for assistance."
+            )
+            return OrchestratorResult(
+                intent=ctx.intent,
+                ui={"type": "text_response", "message": msg},
+                requires_action=False,
+            ).to_chat_response()
 
-        result = await self._synthesize.synthesize(ctx, plan, results)
-        return result.to_chat_response()
+        payee = pending_pin.get("payee", "the recipient")
+        amount = pending_pin.get("amount", "")
+        currency = pending_pin.get("currency", "MYR")
+        amount_str = f"{currency} {float(amount):.2f}" if amount else ""
+        msg = (
+            f"✓ Transfer{' of ' + amount_str if amount_str else ''} to {payee} is being processed "
+            "— check your transaction history for the result."
+        )
+        return OrchestratorResult(
+            intent=ctx.intent,
+            ui={"type": "text_response", "message": msg},
+            requires_action=False,
+        ).to_chat_response()
 
     async def _save_pending_pin(
         self,

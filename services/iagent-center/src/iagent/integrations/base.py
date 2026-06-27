@@ -125,6 +125,9 @@ class BaseServiceClient:
         # TODO: await self._token_provider.get_token() once M2M auth is implemented.
         headers: dict[str, str] = {
             "X-Request-ID": request_id,
+            # The Java backend services read X-Trace-Id (their servlet TraceIdFilter)
+            # and propagate it across SOFA RPC, so the whole call chain shares this id.
+            "X-Trace-Id": request_id,
             "X-User-ID": user_id,
             "X-Workflow-ID": workflow_id,
             "X-Session-ID": session_id,

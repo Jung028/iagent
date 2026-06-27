@@ -1,5 +1,6 @@
 import uuid  # Python's built-in library for generating UUIDs (like java.util.UUID)
 
+import structlog
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -39,15 +40,25 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         # In Java Spring this is like using RequestContextHolder or MDC.
         request.state.request_id = request_id
 
-        # "await call_next(request)" passes control to the next layer (middleware or route).
-        # "await" pauses this function until call_next finishes, then continues.
-        # In Java: CompletableFuture.get() — but non-blocking (thread is freed while waiting).
-        response = await call_next(request)
+        # Bind the id as `trace_id` into structlog's context so EVERY log line in
+        # this request automatically carries it (via merge_contextvars). This is the
+        # same id we forward downstream as X-Trace-Id, so iAgent + the Java services
+        # all share one trace id. In Java Spring this is MDC.put("traceId", ...).
+        structlog.contextvars.bind_contextvars(trace_id=request_id)
 
-        # After the route handler has finished and built a response,
-        # we add X-Request-ID to the response headers too.
-        # This lets the mobile app read the ID for its own logging.
-        response.headers["X-Request-ID"] = request_id
+        try:
+            # "await call_next(request)" passes control to the next layer (middleware or route).
+            # "await" pauses this function until call_next finishes, then continues.
+            # In Java: CompletableFuture.get() — but non-blocking (thread is freed while waiting).
+            response = await call_next(request)
 
-        # Return the response back up the middleware chain.
-        return response
+            # After the route handler has finished and built a response,
+            # we add X-Request-ID to the response headers too.
+            # This lets the mobile app read the ID for its own logging.
+            response.headers["X-Request-ID"] = request_id
+
+            # Return the response back up the middleware chain.
+            return response
+        finally:
+            # Always clear the bound context so ids never leak between requests.
+            structlog.contextvars.clear_contextvars()

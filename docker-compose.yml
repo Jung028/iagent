@@ -16,6 +16,9 @@ services:
     env_file: .env
     ports:
       - "8000:8000"
+    volumes:
+      # expose logs to the host so promtail can scrape them into Loki
+      - ./logs:/app/logs
     depends_on:
       - redis
       - wiremock
