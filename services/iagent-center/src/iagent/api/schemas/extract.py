@@ -1,12 +1,21 @@
 from typing import Any
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+from pydantic.alias_generators import to_camel
 
 
 class DocumentExtractRequest(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
     source_document_id: str
     file_url: str
     mime_type: str
     metadata: dict[str, Any] = {}
+
+
+class ReceiptLineItem(BaseModel):
+    name: str
+    quantity: int = 1
+    unit_price: float
 
 
 class ExtractedFields(BaseModel):
@@ -16,6 +25,9 @@ class ExtractedFields(BaseModel):
     currency: str | None = None
     category: str | None = None
     description: str | None = None
+    tax_amount: float | None = None
+    sst_amount: float | None = None
+    items: list[ReceiptLineItem] = []
 
 
 class DocumentExtractResponse(BaseModel):
