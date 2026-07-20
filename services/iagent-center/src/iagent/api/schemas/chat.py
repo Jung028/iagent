@@ -57,3 +57,8 @@ class ChatResponse(BaseModel):
     # This means if you create a ChatResponse without specifying requires_action,
     # it automatically becomes False. In Java: boolean requiresAction = false;
     requires_action: bool = False
+
+    # The thread this turn was stored under. The frontend echoes it back as
+    # "thread_id" on subsequent /chat requests so the conversation stays in
+    # one thread; omitting it makes the RAG layer create a new thread.
+    thread_id: str | None = None

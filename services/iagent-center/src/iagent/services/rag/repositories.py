@@ -197,13 +197,14 @@ class InteractionRepository:
         thread_id: uuid.UUID,
         user_id: int,
         result: Any,
+        message: str = "",
     ) -> None:
         self._session.add(Interaction(
             id=uuid.uuid4(),
             thread_id=thread_id,
             user_id=user_id,
             role="assistant",
-            message="",
+            message=message,
             intents={},
             entities={},
             result=_to_jsonable(result),

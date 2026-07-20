@@ -126,6 +126,8 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
 
     response = await http_request.app.state.orchestrator.run(ctx)
 
+    assistant_text = _extract_assistant_text(response)
+
     # Save conversation turn to session history so future requests have memory
     session_store = getattr(http_request.app.state, "session_store", None)
     if session_store and ctx.session_id:
@@ -134,7 +136,6 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
             "content": request.message,
             "intent":  intent_result.intent.value,
         })
-        assistant_text = _extract_assistant_text(response)
         if assistant_text:
             await session_store.append(ctx.session_id, {
                 "role":    "assistant",
@@ -143,14 +144,17 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
 
     # RAG 2: store interaction for future semantic retrieval
     if rag_service:
-        await rag_service.store(
+        stored_thread_id = await rag_service.store(
             user_id=request.user_id,
             thread_id=memory_context.get("thread_id", ""),
             message=request.message,
             intents=intent_result,
             entities=ctx.entities,
             result=response,
+            assistant_text=assistant_text,
         )
+        if stored_thread_id:
+            response.thread_id = stored_thread_id
 
     return response
 

@@ -136,12 +136,18 @@ class RAGService:
         intents: Any,
         entities: dict,
         result: Any,
-    ) -> None:
-        """Never raises — errors are logged silently so the user response is never blocked."""
+        assistant_text: str = "",
+    ) -> str | None:
+        """Never raises — errors are logged silently so the user response is never blocked.
+
+        Returns the thread_id the interaction was stored under (a new thread is
+        created when the given thread_id is missing or unknown), or None if the
+        store was skipped or failed.
+        """
         int_user_id = _parse_user_id(user_id)
         if int_user_id is None:
             log.warning("rag.store_skipped_invalid_user_id", user_id=user_id)
-            return
+            return None
 
         uuid_thread_id = _parse_uuid(thread_id)
         thread_obj = None
@@ -177,6 +183,7 @@ class RAGService:
                         thread_id=thread_obj.thread_id,
                         user_id=int_user_id,
                         result=result,
+                        message=assistant_text,
                     )
                     if entities:
                         await entity_repo.insert_or_update_entities(int_user_id, entities)
@@ -200,6 +207,8 @@ class RAGService:
 
         except Exception as exc:
             log.error("rag.store_failed", user_id=user_id, error=str(exc))
+
+        return str(thread_obj.thread_id) if thread_obj else None
 
     # ── Thread listing & detail ───────────────────────────────────────────────
 
@@ -240,7 +249,7 @@ class RAGService:
                     "id":         str(i.id),
                     "role":       i.role,
                     "message":    i.message or None,
-                    "result":     i.result or None,
+                    "result":     _unwrap_ui_card(i.result),
                     "created_at": i.created_at,
                 }
                 for i in interactions
@@ -302,6 +311,16 @@ class RAGService:
             None, self._model.encode, text
         )
         return embedding.tolist()
+
+
+def _unwrap_ui_card(result: Any) -> Any:
+    """Interactions store the full ChatResponse envelope, but the thread-detail
+    contract (FRONTEND_INTERFACES.md §4) exposes `result` as the UI card itself."""
+    if not result:
+        return None
+    if isinstance(result, dict) and isinstance(result.get("ui"), dict):
+        return result["ui"]
+    return result
 
 
 def _parse_user_id(user_id: str) -> int | None:
